@@ -195,15 +195,26 @@ func (c *Core) ensureSession(ctx context.Context, tx *sql.Tx, harness, native, p
 		parent_id = coalesce(sessions.parent_id, excluded.parent_id),
 		harness_version = CASE WHEN excluded.harness_version != '' THEN excluded.harness_version ELSE harness_version END`,
 		id, harness, native, parentID, project, worktree, agentType, version, imported, c.now(), c.now())
-	return id, err
+	if err != nil {
+		return "", err
+	}
+	// A session recorded for another project is never extended from here.
+	var owner sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT project_id FROM sessions WHERE id = ?`, id).Scan(&owner); err != nil {
+		return "", err
+	}
+	if owner.String != project {
+		return "", nil
+	}
+	return id, nil
 }
 
 func (c *Core) recordBoundary(ctx context.Context, harness string, adapter ingest.Adapter, s Scope, native string, p hookPayload, b boundary) (string, bool, error) {
 	// Identity includes the transcript size, so a duplicate delivery of the
 	// same boundary is idempotent while a later boundary is a new event.
 	size := int64(-1)
-	if p.TranscriptPath != "" {
-		if st, err := os.Stat(p.TranscriptPath); err == nil {
+	if resolved, err := c.pol.Transcript(harness, p.TranscriptPath); err == nil {
+		if st, err := os.Stat(resolved); err == nil {
 			size = st.Size()
 		}
 	}

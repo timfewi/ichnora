@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "entry_sha256": "0614da47bafc051353196ebdb7fac5b76809b797f2aacebeef6ac0d0b43dd767",
+  "entry_sha256": "66450f4ba0fa91353aa6513b92973f8822eb043c93c2087faba6fb8fc1540d1a",
   "sources": {
     ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
     "adapters/opencode/index.js": "5a81327dbb799fca4f8165257de0898c8fe6b986a932ecf0188dbc79abff757f",
@@ -31,7 +31,7 @@
   "cards": {
     "entry": {
       "path": ".tabula/ENTRY.md",
-      "sha256": "0614da47bafc051353196ebdb7fac5b76809b797f2aacebeef6ac0d0b43dd767",
+      "sha256": "66450f4ba0fa91353aa6513b92973f8822eb043c93c2087faba6fb8fc1540d1a",
       "sections": {
         "entry/1-ichnora-1": {
           "fingerprint": "8fb824fa1a59a782ebca67d46acb23d2a170a98ad799747c42da167ddb3eebe6",
@@ -83,7 +83,7 @@
           }
         },
         "entry/2-progress-checkpoint-1": {
-          "fingerprint": "300294dac37ac8e0295847ba0883ec52cb9666dddf70149ddd8db3763c4e177c",
+          "fingerprint": "6285a466b250d90f0a5cde2f2f2be02cce85344ffab4af4391031e5410138382",
           "sources": {}
         }
       }

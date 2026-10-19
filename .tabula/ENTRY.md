@@ -61,5 +61,7 @@ levels in the acceptance inventory. Pins: Go 1.26.7 and SQLite 3.53.3 from
 nixpkgs `eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. Local commits only:
 no remote exists. `coding-agents-nix` has the registration staged, uncommitted;
 `nixos-host` has the capabilities committed locally (not pushed, not imported).
+One test-service panic was seen once during development and not reproduced in
+ten later runs; a concurrent listener-list race was fixed, root cause unconfirmed.
 Open: private remote, Nix package build, publishing the coding-agents change,
 host input/lock and activation, live harness runs, owner enrollment.
