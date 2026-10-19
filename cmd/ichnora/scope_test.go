@@ -282,6 +282,11 @@ func TestMixedProjectAndChildSessionsCannotWidenAccess(t *testing.T) {
 	if s := e.search(e.alpha, "lexer"); s.Omitted.Unattributed != 3 {
 		t.Fatalf("the attribution gap must be reported: %+v", s.Omitted)
 	}
+	// Beta cannot extend alpha's session by reusing its native ID.
+	e.hook(e.beta, "claude", map[string]any{"hook_event_name": "Stop", "session_id": session, "transcript_path": path, "cwd": e.beta})
+	if count(e.must(e.beta, "", "status").Raw, "sessions") != 0 || count(e.must(e.beta, "", "status").Raw, "events") != 0 {
+		t.Fatal("a foreign project's hook extended the session")
+	}
 }
 
 // Every read operation stays within its byte budget with valid JSON, even
