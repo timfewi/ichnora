@@ -185,6 +185,11 @@ func (p *Policy) Source(root, rel string) (string, error) {
 		if cat, bad := excludedFile(filepath.Base(resolved)); bad {
 			return "", deny("source target is an excluded " + cat)
 		}
+		for dir := filepath.Dir(resolved); dir != root && Within(root, dir); dir = filepath.Dir(dir) {
+			if IsRepository(dir) {
+				return "", deny("source target lies in a nested repository")
+			}
+		}
 	}
 	st, err := os.Stat(resolved)
 	if err != nil || !st.Mode().IsRegular() {

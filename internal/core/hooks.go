@@ -159,9 +159,12 @@ func (c *Core) Hook(ctx context.Context, caller Caller, req contract.HookRequest
 func tombstoneKey(harness, native string) string { return "session:" + harness + ":" + native }
 
 // ensureSession creates or refreshes a session row unless it is tombstoned.
+// A child session inherits at most its parent's project: a parent recorded
+// for another project makes the child unusable (empty ID).
 func (c *Core) ensureSession(ctx context.Context, tx *sql.Tx, harness, native, parent, project, worktree, agentType, version string, imported bool) (string, error) {
 	var dead int
-	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM tombstones WHERE key = ?`, tombstoneKey(harness, native)).Scan(&dead); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM tombstones WHERE key = ? OR key = ?`,
+		tombstoneKey(harness, native), tombstoneKey(harness, parent)).Scan(&dead); err != nil {
 		return "", err
 	}
 	if dead > 0 {
@@ -170,11 +173,26 @@ func (c *Core) ensureSession(ctx context.Context, tx *sql.Tx, harness, native, p
 	id := ingest.ID("ses_", harness, native)
 	var parentID any
 	if parent != "" {
-		parentID = ingest.ID("ses_", harness, parent)
+		pid := ingest.ID("ses_", harness, parent)
+		var parentProject sql.NullString
+		err := tx.QueryRowContext(ctx, `SELECT project_id FROM sessions WHERE id = ?`, pid).Scan(&parentProject)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sessions (id, harness, native_id, project_id, worktree_id, first_seen, last_seen)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`, pid, harness, parent, project, worktree, c.now(), c.now()); err != nil {
+				return "", err
+			}
+		case err != nil:
+			return "", err
+		case parentProject.String != project:
+			return "", nil
+		}
+		parentID = pid
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO sessions (id, harness, native_id, parent_id, project_id, worktree_id, agent_type,
 		harness_version, imported, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (harness, native_id) DO UPDATE SET last_seen = excluded.last_seen,
+		parent_id = coalesce(sessions.parent_id, excluded.parent_id),
 		harness_version = CASE WHEN excluded.harness_version != '' THEN excluded.harness_version ELSE harness_version END`,
 		id, harness, native, parentID, project, worktree, agentType, version, imported, c.now(), c.now())
 	return id, err
@@ -194,7 +212,7 @@ func (c *Core) recordBoundary(ctx context.Context, harness string, adapter inges
 	recorded := false
 	err := c.write(ctx, func(tx *sql.Tx) error {
 		var err error
-		sessionID, err = c.ensureSession(ctx, tx, harness, native, "", s.ProjectID, s.Worktree, "", p.Version, false)
+		sessionID, err = c.ensureSession(ctx, tx, harness, native, p.OCParent, s.ProjectID, s.Worktree, "", p.Version, false)
 		if err != nil || sessionID == "" {
 			return err
 		}
@@ -234,18 +252,8 @@ func (c *Core) ingestHook(ctx context.Context, harness string, adapter ingest.Ad
 				Version: p.Version, Message: m})
 			lines = append(lines, ingest.Line{No: int64(i + 1), Data: line})
 		}
-		session := sessionID
-		if p.OCParent != "" {
-			// A child session inherits at most the parent's project.
-			if err := c.write(ctx, func(tx *sql.Tx) error {
-				var err error
-				session, err = c.ensureSession(ctx, tx, harness, native, p.OCParent, s.ProjectID, s.Worktree, "subagent", p.Version, false)
-				return err
-			}); err != nil || session == "" {
-				return 0, err
-			}
-		}
-		return c.storeEvents(ctx, adapter, s, session, "plugin:"+harness, lines, &ingest.State{}, nil)
+		// recordBoundary already linked a child session to its parent.
+		return c.storeEvents(ctx, adapter, s, sessionID, "plugin:"+harness, lines, &ingest.State{}, nil)
 	case p.Event == "SubagentStop" && p.AgentPath != "" && p.AgentID != "":
 		child := native + "/" + p.AgentID
 		var childID string

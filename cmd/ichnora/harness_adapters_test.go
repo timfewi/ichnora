@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/timfewi/ichnora/internal/contract"
+	"github.com/timfewi/ichnora/internal/ingest"
 	"github.com/timfewi/ichnora/internal/mcpbridge"
 	"github.com/timfewi/ichnora/internal/server"
 )
@@ -137,6 +138,9 @@ func TestHarnessAdaptersAndCrossHarnessResume(t *testing.T) {
 	}
 	if s := e.search(e.alpha, "digest OpenCode review"); s.Totals.Sources < 2 {
 		t.Fatalf("OpenCode turns not ingested: %+v", s.Totals)
+	}
+	if r := e.must(e.alpha, "", "read", ingest.ID("ses_", "opencode", "oc-child")); !strings.Contains(r.Raw, `"parent":"`+ingest.ID("ses_", "opencode", "oc-1")+`"`) {
+		t.Fatalf("OpenCode child session must link its parent: %s", r.Raw)
 	}
 
 	// Injected context echoed into a transcript is not re-imported as evidence.

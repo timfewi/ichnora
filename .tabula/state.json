@@ -1,13 +1,13 @@
 {
   "version": 3,
-  "entry_sha256": "0eac56ac15f46dc9e8387911ddd346a2a6ab2babdc878f745097374f71873e3f",
+  "entry_sha256": "0614da47bafc051353196ebdb7fac5b76809b797f2aacebeef6ac0d0b43dd767",
   "sources": {
     ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
     "adapters/opencode/index.js": "5a81327dbb799fca4f8165257de0898c8fe6b986a932ecf0188dbc79abff757f",
     "cmd/ichnora/main.go": "c3607ef6bea275c21a3bd0b3055759591ad84942c463bca50f0eb6c7730850ab",
     "cmd/ichnora/serve.go": "bc985a044ef5f6e2bb91726b531300d95f1eae9c7bd7480cea680d6b82bf1715",
     "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-    "docs/acceptance.md": "340da435188292cc3f88c87fb482e8da04dfd0466870cc005c8561d925a91a8f",
+    "docs/acceptance.md": "1c2fffce0972cb35edd68e968b0a97ee5bbcad45a4661ec85bb72edb6812b504",
     "docs/adapters.md": "f260b20ba24502755400c94a9c849d4a3626624364da15e86bf7c76d55c8b551",
     "docs/architecture.md": "cfa758d08836344abc609960757842de34d6ea1c3ae4ac75ddff8ef40de381be",
     "docs/contract.md": "291802295c3009b56ac6763d3a80458e2e38add8f869b48b1565ec235535a61b",
@@ -16,12 +16,12 @@
     "internal/core/applicability.go": "b999788ea53d7d2db8d2c82d70d65df6db9b0f50bf3341a15a0e639d83d85c0c",
     "internal/core/claims.go": "debeaa24353b9f8e458fa45584c4c4997bfdf5a67d66a9d2622d98091d1d136c",
     "internal/core/core.go": "1f5de1f893517cb7734f044aeb83a709a54586562bbf003e824b70cdcbccb787",
-    "internal/core/search.go": "5ce23c3e320ed665a0425c2a969aa701aa5c94b31e40ffdbfba1bb6ddf05c212",
+    "internal/core/search.go": "94fc5fa304083e429ec719e8dd378fbcdaf0515f9a8ab41887281ba0e8f3f6a4",
     "internal/core/tasks.go": "ccb0cb06ad000b8df966a6e3b541cf62fdf375c8dcadd618058a83573c2cd711",
     "internal/evidence/evidence.go": "16626f314ce415daa637a1d0c333bc04a06e0b9df35152083a9c48da38bc4c7f",
     "internal/ingest/ingest.go": "6f74db882d269880a1729811be92d4b8937b7a867ec79b991ada1ff5817812d2",
-    "internal/policy/policy.go": "4dbbd12dfd321e114b55aa575a4c747e711529354275e1022babfce6bf568730",
-    "internal/server/server.go": "89a6338a2259b7eed7911f69a189dedff380c687f6ebaec1040019a42c1a9310",
+    "internal/policy/policy.go": "370e53cb88a1ad7ac1f37acee9f3fafca33405746334b91b97fddd52ba07713a",
+    "internal/server/server.go": "f2dff477d32e8cb1ff38ba3d717e3c177644cd05397544e786427604383d12a5",
     "internal/store/migrations/0001_init.sql": "86f9603228e10590ae59b00653a3e35b4b11374d250861f23903037623584b40",
     "internal/store/store.go": "2345f6d14e92ac3cd35e6295a23ffbb08ce78ca7c3c2d79560c9021e1645bfd3",
     "nix/module.nix": "7c1cf4370ebb09ff26523189910814018c3f77fe1f6c2e67e1cdabb4db2a708b",
@@ -31,22 +31,22 @@
   "cards": {
     "entry": {
       "path": ".tabula/ENTRY.md",
-      "sha256": "0eac56ac15f46dc9e8387911ddd346a2a6ab2babdc878f745097374f71873e3f",
+      "sha256": "0614da47bafc051353196ebdb7fac5b76809b797f2aacebeef6ac0d0b43dd767",
       "sections": {
         "entry/1-ichnora-1": {
           "fingerprint": "8fb824fa1a59a782ebca67d46acb23d2a170a98ad799747c42da167ddb3eebe6",
           "sources": {}
         },
         "entry/2-architecture-1": {
-          "fingerprint": "7952e277cc26d751f3c4d70c5d94c6a182c2933758c78d8eb3630c9cc9a6dcc7",
+          "fingerprint": "46dc0ece38cae09604c0efa433ef50d4c9fd9f1ef9935a9049445e5271cc5681",
           "sources": {
             "cmd/ichnora/main.go": "c3607ef6bea275c21a3bd0b3055759591ad84942c463bca50f0eb6c7730850ab",
             "cmd/ichnora/serve.go": "bc985a044ef5f6e2bb91726b531300d95f1eae9c7bd7480cea680d6b82bf1715",
-            "internal/server/server.go": "89a6338a2259b7eed7911f69a189dedff380c687f6ebaec1040019a42c1a9310",
+            "internal/server/server.go": "f2dff477d32e8cb1ff38ba3d717e3c177644cd05397544e786427604383d12a5",
             "internal/core/core.go": "1f5de1f893517cb7734f044aeb83a709a54586562bbf003e824b70cdcbccb787",
             "internal/store/store.go": "2345f6d14e92ac3cd35e6295a23ffbb08ce78ca7c3c2d79560c9021e1645bfd3",
             "internal/store/migrations/0001_init.sql": "86f9603228e10590ae59b00653a3e35b4b11374d250861f23903037623584b40",
-            "internal/policy/policy.go": "4dbbd12dfd321e114b55aa575a4c747e711529354275e1022babfce6bf568730",
+            "internal/policy/policy.go": "370e53cb88a1ad7ac1f37acee9f3fafca33405746334b91b97fddd52ba07713a",
             "internal/ingest/ingest.go": "6f74db882d269880a1729811be92d4b8937b7a867ec79b991ada1ff5817812d2",
             "internal/evidence/evidence.go": "16626f314ce415daa637a1d0c333bc04a06e0b9df35152083a9c48da38bc4c7f",
             "docs/architecture.md": "cfa758d08836344abc609960757842de34d6ea1c3ae4ac75ddff8ef40de381be",
@@ -55,16 +55,16 @@
           }
         },
         "entry/2-retrieval-semantics-1": {
-          "fingerprint": "998c711dc6c88ae09f4bf45712f975258a4fb348f7a60fa39a4f5abcced331b0",
+          "fingerprint": "1089bb859135f23ecb608f8e6e543f38311f817007feb4561573a0ea10a3520f",
           "sources": {
             "internal/core/applicability.go": "b999788ea53d7d2db8d2c82d70d65df6db9b0f50bf3341a15a0e639d83d85c0c",
-            "internal/core/search.go": "5ce23c3e320ed665a0425c2a969aa701aa5c94b31e40ffdbfba1bb6ddf05c212",
+            "internal/core/search.go": "94fc5fa304083e429ec719e8dd378fbcdaf0515f9a8ab41887281ba0e8f3f6a4",
             "internal/core/claims.go": "debeaa24353b9f8e458fa45584c4c4997bfdf5a67d66a9d2622d98091d1d136c",
             "internal/core/tasks.go": "ccb0cb06ad000b8df966a6e3b541cf62fdf375c8dcadd618058a83573c2cd711"
           }
         },
         "entry/2-packaging-and-integration-1": {
-          "fingerprint": "da06d29ff3b26bed542821adee11c76c5f580386826bdbf875f316e73a503a15",
+          "fingerprint": "f344d13723436e798408e70a05a8c1f1ba9c265d43f4c29bde204f306c733b7b",
           "sources": {
             "flake.nix": "3eadf3bab93257c71d41f0225868a6b781790b95ffda69cbecb37d538afb14e5",
             "nix/package.nix": "d197e9fef4f5934e7b57e240f696b6ad28a078dc90da44988d17bd032b220a68",
@@ -75,15 +75,15 @@
           }
         },
         "entry/2-verification-1": {
-          "fingerprint": "9403eaffeac06fb510e7cd8ac8182e00b9f7c11d1d67ef8f4a25b24cc3b85b02",
+          "fingerprint": "bcfa938ffba461e39a70acb682ad0d8d5275d8186b09fc128e985a28a769b5b5",
           "sources": {
             ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
             "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-            "docs/acceptance.md": "340da435188292cc3f88c87fb482e8da04dfd0466870cc005c8561d925a91a8f"
+            "docs/acceptance.md": "1c2fffce0972cb35edd68e968b0a97ee5bbcad45a4661ec85bb72edb6812b504"
           }
         },
         "entry/2-progress-checkpoint-1": {
-          "fingerprint": "e983e8e6d3c5671906eb9ec3df2d490032332d235599821ca2d49b929de37d32",
+          "fingerprint": "300294dac37ac8e0295847ba0883ec52cb9666dddf70149ddd8db3763c4e177c",
           "sources": {}
         }
       }
