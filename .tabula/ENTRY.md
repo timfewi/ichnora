@@ -36,17 +36,30 @@ support roots, so repetition adds no corroboration ([claims](../internal/core/cl
 Tasks change state only through explicit revisioned transitions; resume rebuilds
 context from the accepted checkpoint ([tasks](../internal/core/tasks.go)).
 
+## Packaging and integration
+
+[flake.nix](../flake.nix) exports the package ([package.nix](../nix/package.nix)) and
+`nixosModules.default` ([module.nix](../nix/module.nix), checked by
+[module-eval](../tests/module-eval.nix)). The thin OpenCode plugin is
+[adapters/opencode](../adapters/opencode/index.js). Native registration lives in
+`coding-agents-nix` (`programs.coding-agents.ichnora`); host policy in
+`nixos-host` capabilities `ichnora-service.nix` and `ichnora-client.nix`.
+Owner steps: [operations](../docs/operations.md).
+
 ## Verification
 
 `just check` runs [.project-checks.json](../.project-checks.json) inside
 `nix develop .`. Acceptance scenarios run the real service, CLI, hooks and MCP
 bridge against synthetic fixtures ([tests](../cmd/ichnora/stale_test.go));
-the scenario inventory is [acceptance](../docs/acceptance.md).
+opt-in tests drive the installed evidence tools and OpenCode's embedded
+runtime. The scenario inventory is [acceptance](../docs/acceptance.md).
 
 ## Progress checkpoint
 
-Phase: 3 of 7. Phases 1–2 are verified; phase 3 stale-context, invalidation,
-revocation and isolation scenarios pass, retention/recovery tests are pending. Pins: Go 1.26.7 and SQLite 3.53.3 from nixpkgs
-`eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. No remote exists; nothing
-is installed, activated or collecting. Next: retention/restore and
-ingestion robustness tests, OpenCode plugin, composition, host packaging.
+Phase: 7 of 7 (hand-off). Phases 1–6 are implemented and verified at the
+levels in the acceptance inventory. Pins: Go 1.26.7 and SQLite 3.53.3 from
+nixpkgs `eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. Local commits only:
+no remote exists. `coding-agents-nix` has the registration staged, uncommitted;
+`nixos-host` has the capabilities committed locally (not pushed, not imported).
+Open: private remote, Nix package build, publishing the coding-agents change,
+host input/lock and activation, live harness runs, owner enrollment.
