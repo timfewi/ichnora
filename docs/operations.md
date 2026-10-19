@@ -1,6 +1,8 @@
 # Operations
 
-Steps that need separate owner authorization. None of them has been run.
+Steps that need separate owner authorization. Steps 1–3, activation on
+memorycrime and enrollment of the infrastructure repositories are done; hooks,
+Ichnora recall and historical import are not.
 Commands use the implemented syntax; `PATH` placeholders are yours to fill.
 
 ## 1. Publish and verify the package
@@ -17,9 +19,8 @@ Nix prints the expected value for `nix/package.nix`.
 
 ## 2. Land the harness registration
 
-`coding-agents-nix` holds the staged, uncommitted registration
-(`nix/modules/ichnora.nix`, `tests/ichnora.nix`). Review it, commit and push
-it there, then update the host lock.
+`coding-agents-nix` holds the registration (`nix/modules/ichnora.nix`,
+`tests/ichnora.nix`); update the host lock after changing it.
 
 ## 3. Wire the host (`nixos-host`)
 

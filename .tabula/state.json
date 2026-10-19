@@ -1,17 +1,17 @@
 {
   "version": 3,
-  "entry_sha256": "07f103ec9fddb56ca52505a33e58fb1b9e26858905f1faba8b0b95c34383295a",
+  "entry_sha256": "e3b3e37b53630a660d3494f755909ac9bd3e3a78a7d3e4700be26ee01a1e7cfb",
   "sources": {
     ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
     "adapters/opencode/index.js": "5a81327dbb799fca4f8165257de0898c8fe6b986a932ecf0188dbc79abff757f",
     "cmd/ichnora/main.go": "c3607ef6bea275c21a3bd0b3055759591ad84942c463bca50f0eb6c7730850ab",
     "cmd/ichnora/serve.go": "bc985a044ef5f6e2bb91726b531300d95f1eae9c7bd7480cea680d6b82bf1715",
     "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-    "docs/acceptance.md": "2f6b5e89929b5c5105c0fb6c90834f50554305ce88b6930bc400caf3688313fb",
+    "docs/acceptance.md": "fe0b1a8ae8ff18dcdcefc3f466eb42514181bbadeb2e12946fd1a4affe4bb29d",
     "docs/adapters.md": "f260b20ba24502755400c94a9c849d4a3626624364da15e86bf7c76d55c8b551",
     "docs/architecture.md": "cfa758d08836344abc609960757842de34d6ea1c3ae4ac75ddff8ef40de381be",
     "docs/contract.md": "291802295c3009b56ac6763d3a80458e2e38add8f869b48b1565ec235535a61b",
-    "docs/operations.md": "56ae4294b0f6723e4e280af8404dbcb0aca25352ec3328ddf33498432e5904d6",
+    "docs/operations.md": "875086ca6fbde7aaedd6ee4256861208941278ebd73d1cd84a6288980e927d24",
     "flake.nix": "3eadf3bab93257c71d41f0225868a6b781790b95ffda69cbecb37d538afb14e5",
     "internal/core/applicability.go": "b999788ea53d7d2db8d2c82d70d65df6db9b0f50bf3341a15a0e639d83d85c0c",
     "internal/core/claims.go": "debeaa24353b9f8e458fa45584c4c4997bfdf5a67d66a9d2622d98091d1d136c",
@@ -31,7 +31,7 @@
   "cards": {
     "entry": {
       "path": ".tabula/ENTRY.md",
-      "sha256": "07f103ec9fddb56ca52505a33e58fb1b9e26858905f1faba8b0b95c34383295a",
+      "sha256": "e3b3e37b53630a660d3494f755909ac9bd3e3a78a7d3e4700be26ee01a1e7cfb",
       "sections": {
         "entry/1-ichnora-1": {
           "fingerprint": "8fb824fa1a59a782ebca67d46acb23d2a170a98ad799747c42da167ddb3eebe6",
@@ -64,26 +64,26 @@
           }
         },
         "entry/2-packaging-and-integration-1": {
-          "fingerprint": "f344d13723436e798408e70a05a8c1f1ba9c265d43f4c29bde204f306c733b7b",
+          "fingerprint": "bded00100677d2cfb76be9ae993aae9f3d59fe0b14a842971fc7886f420d28ad",
           "sources": {
             "flake.nix": "3eadf3bab93257c71d41f0225868a6b781790b95ffda69cbecb37d538afb14e5",
             "nix/package.nix": "d197e9fef4f5934e7b57e240f696b6ad28a078dc90da44988d17bd032b220a68",
             "nix/module.nix": "7c1cf4370ebb09ff26523189910814018c3f77fe1f6c2e67e1cdabb4db2a708b",
             "tests/module-eval.nix": "2658f1ec2b156934e4def5a0270758ebb97c529b5b8d78d9e02e2740af0e60f3",
             "adapters/opencode/index.js": "5a81327dbb799fca4f8165257de0898c8fe6b986a932ecf0188dbc79abff757f",
-            "docs/operations.md": "56ae4294b0f6723e4e280af8404dbcb0aca25352ec3328ddf33498432e5904d6"
+            "docs/operations.md": "875086ca6fbde7aaedd6ee4256861208941278ebd73d1cd84a6288980e927d24"
           }
         },
         "entry/2-verification-1": {
-          "fingerprint": "e4d3a7bb7446a12410f97ab3864bb30cf7617c25d81e2332fea2efd1d351b951",
+          "fingerprint": "0ad5e7f60bfe80f28adb2bee05efa2ab636eede0ae6a230d2db0a9387fc18796",
           "sources": {
             ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
             "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-            "docs/acceptance.md": "2f6b5e89929b5c5105c0fb6c90834f50554305ce88b6930bc400caf3688313fb"
+            "docs/acceptance.md": "fe0b1a8ae8ff18dcdcefc3f466eb42514181bbadeb2e12946fd1a4affe4bb29d"
           }
         },
         "entry/2-progress-checkpoint-1": {
-          "fingerprint": "97f59f620d8256931a912bf7ceba8a0912529979394b124a3e9c0ae7a157b6a4",
+          "fingerprint": "9218a5f5c0b55072e96a54cf6e2312300aa630165670fe99e31cbd77acd30b55",
           "sources": {}
         }
       }

@@ -61,9 +61,10 @@ levels in the acceptance inventory. Pins: Go 1.26.7 and SQLite 3.53.3 from
 nixpkgs `eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. Private remote
 `timfewi/ichnora`. `coding-agents-nix` 1c48468 registers the bridge;
 `nixos-host` f2749da pins ichnora 8d254f2 and imports the capabilities on
-memorycrime (host nixpkgs: Go 1.26.8). The memorycrime closure is built and its
-package checkPhase passed the acceptance suite; switching needs the owner's
-sudo. Hooks and enrollment stay off until the owner opts in.
+memorycrime (host nixpkgs: Go 1.26.8); its package checkPhase passed the
+acceptance suite. The owner switched memorycrime; the service runs with 26
+enrolled repositories (collection on, recall off). Hooks stay off until the
+owner opts in.
 One test-service panic was seen once during development and not reproduced in
 ten later runs; a concurrent listener-list race was fixed, root cause unconfirmed.
-Open: switch and service read-back, live harness runs, owner enrollment.
+Open: hooks and live harness runs, historical import, quality evaluation.
