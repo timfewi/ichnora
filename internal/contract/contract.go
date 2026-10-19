@@ -129,7 +129,8 @@ func Marshal(v any) ([]byte, error) {
 // trimming whole units from a Trimmable result until it fits.
 func Encode(op string, result any, maxBytes int) ([]byte, error) {
 	resp := Response{Contract: Version, OK: true, Op: op, Result: result}
-	for {
+	// The bound guarantees termination even if a Trim implementation regresses.
+	for attempt := 0; ; attempt++ {
 		out, err := Marshal(resp)
 		if err != nil {
 			return nil, err
@@ -138,7 +139,7 @@ func Encode(op string, result any, maxBytes int) ([]byte, error) {
 			return out, nil
 		}
 		t, ok := result.(Trimmable)
-		if !ok || !t.Trim() {
+		if !ok || attempt >= 4096 || !t.Trim() {
 			return Marshal(Response{Contract: Version, OK: false, Op: op,
 				Error: &Error{Code: CodeInsufficientBudget, Message: "result skeleton exceeds max_bytes", MinBytes: len(out)}})
 		}

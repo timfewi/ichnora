@@ -366,12 +366,13 @@ type ResumeResult struct {
 // Trim drops the lowest-priority line, then shortens the free-text header
 // fields; totals keep every section's existence visible.
 func (r *ResumeResult) Trim() bool {
+	const keep, ellipsis = 96, "…"
 	shorten := func(s *string) bool {
-		if len(*s) <= 96 {
+		if len(*s) <= keep+len(ellipsis) {
 			return false
 		}
-		*s, _ = Truncate(*s, 96)
-		*s += "…"
+		*s, _ = Truncate(*s, keep)
+		*s += ellipsis
 		return true
 	}
 	switch {
