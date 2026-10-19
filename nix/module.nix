@@ -193,62 +193,66 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    systemd.tmpfiles.rules = [
-      "d ${cfg.stateDir} 0700 ${cfg.user} ${if cfg.group == null then "-" else cfg.group} - -"
-    ];
+    systemd = {
+      tmpfiles.rules = [
+        "d ${cfg.stateDir} 0700 ${cfg.user} ${if cfg.group == null then "-" else cfg.group} - -"
+      ];
 
-    systemd.services.ichnora = {
-      description = "Ichnora memory service";
-      wantedBy = [ "multi-user.target" ];
-      after = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
-      wants = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
-      serviceConfig = owner // {
-        Type = "simple";
-        ExecStart = utils.escapeSystemdExecArgs [
-          (lib.getExe cfg.package)
-          "serve"
-          "--config"
-          "${configFile}"
-        ];
-        RuntimeDirectory = "ichnora";
-        RuntimeDirectoryMode = "0700";
-        UMask = "0077";
-        Restart = "on-failure";
-        RestartSec = 2;
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        PrivateNetwork = true;
-        ProtectSystem = "strict";
-        ProtectHome = "read-only";
-        ProtectKernelTunables = true;
-        ProtectControlGroups = true;
-        RestrictAddressFamilies = [ "AF_UNIX" ];
-        RestrictNamespaces = true;
-        LockPersonality = true;
-        ReadWritePaths = [ cfg.stateDir ];
-        ReadOnlyPaths = cfg.readOnlyPaths;
-      };
-    };
+      services = {
+        ichnora = {
+          description = "Ichnora memory service";
+          wantedBy = [ "multi-user.target" ];
+          after = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
+          wants = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
+          serviceConfig = owner // {
+            Type = "simple";
+            ExecStart = utils.escapeSystemdExecArgs [
+              (lib.getExe cfg.package)
+              "serve"
+              "--config"
+              "${configFile}"
+            ];
+            RuntimeDirectory = "ichnora";
+            RuntimeDirectoryMode = "0700";
+            UMask = "0077";
+            Restart = "on-failure";
+            RestartSec = 2;
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            PrivateNetwork = true;
+            ProtectSystem = "strict";
+            ProtectHome = "read-only";
+            ProtectKernelTunables = true;
+            ProtectControlGroups = true;
+            RestrictAddressFamilies = [ "AF_UNIX" ];
+            RestrictNamespaces = true;
+            LockPersonality = true;
+            ReadWritePaths = [ cfg.stateDir ];
+            ReadOnlyPaths = cfg.readOnlyPaths;
+          };
+        };
 
-    systemd.services.ichnora-environment = lib.mkIf cfg.environmentDescriptor.enable {
-      description = "Write the Ichnora host environment descriptor";
-      wantedBy = [ "multi-user.target" ];
-      # A new epoch only when the declared facts change; never derived from a
-      # generation number or flake revision.
-      restartTriggers = [ facts ];
-      serviceConfig = owner // {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        RuntimeDirectory = "ichnora-environment";
-        RuntimeDirectoryMode = "0700";
-        UMask = "0077";
+        ichnora-environment = lib.mkIf cfg.environmentDescriptor.enable {
+          description = "Write the Ichnora host environment descriptor";
+          wantedBy = [ "multi-user.target" ];
+          # A new epoch only when the declared facts change; never derived from a
+          # generation number or flake revision.
+          restartTriggers = [ facts ];
+          serviceConfig = owner // {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            RuntimeDirectory = "ichnora-environment";
+            RuntimeDirectoryMode = "0700";
+            UMask = "0077";
+          };
+          path = [ pkgs.jq ];
+          script = ''
+            epoch="$(cat /proc/sys/kernel/random/uuid)"
+            jq --arg epoch "$epoch" '. + {activation_epoch: $epoch}' ${facts} > ${descriptorPath}.tmp
+            mv ${descriptorPath}.tmp ${descriptorPath}
+          '';
+        };
       };
-      path = [ pkgs.jq ];
-      script = ''
-        epoch="$(cat /proc/sys/kernel/random/uuid)"
-        jq --arg epoch "$epoch" '. + {activation_epoch: $epoch}' ${facts} > ${descriptorPath}.tmp
-        mv ${descriptorPath}.tmp ${descriptorPath}
-      '';
     };
   };
 }
