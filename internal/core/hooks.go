@@ -130,15 +130,16 @@ func (c *Core) Hook(ctx context.Context, caller Caller, req contract.HookRequest
 	if req.Harness == "opencode" && p.OCParent != "" {
 		b.label = "child:" + b.label
 	}
-	if s.Collect {
-		paused := c.ingestionPaused()
-		out.Paused = paused
+	if s.Collect && c.ingestionPaused() {
+		// At capacity nothing is written; cursors stay put for reconciliation.
+		out.Paused = true
+	} else if s.Collect {
 		sessionID, recorded, err := c.recordBoundary(ctx, req.Harness, adapter, s, native, p, b)
 		if err != nil {
 			return out, err
 		}
 		out.Recorded = recorded
-		if !paused && sessionID != "" {
+		if sessionID != "" {
 			n, err := c.ingestHook(ctx, req.Harness, adapter, s, sessionID, native, p)
 			if err != nil {
 				return out, err

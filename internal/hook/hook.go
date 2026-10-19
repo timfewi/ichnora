@@ -43,7 +43,7 @@ func Run(ctx context.Context, client server.Client, harness string, in io.Reader
 		return
 	}
 	if perr != nil {
-		msg := "Ichnora memory unavailable (" + string(perr.Code) + "); this event was not recorded."
+		msg := "Ichnora did not record this event (" + string(perr.Code) + ")."
 		ctxText := ""
 		if native.Event == "SessionStart" {
 			ctxText = "Ichnora memory is unavailable (" + string(perr.Code) + "); no remembered context was loaded."

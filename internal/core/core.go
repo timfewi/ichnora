@@ -116,33 +116,9 @@ var (
 // mapped worktree) contains it. Nested repositories between the root and the
 // path are separate projects and do not resolve to the outer one.
 func (c *Core) resolvePath(ctx context.Context, q querier, path string) (Scope, bool, error) {
-	if path == "" || !filepath.IsAbs(path) {
-		return Scope{}, false, nil
-	}
-	if r, err := filepath.EvalSymlinks(path); err == nil {
-		path = r
-	}
-	rows, err := q.QueryContext(ctx, `SELECT r.path, r.worktree_id, p.id, p.name, p.collect, p.recall
-		FROM roots r JOIN projects p ON p.id = r.project_id WHERE p.enrolled = 1`)
-	if err != nil {
+	best, path, err := c.enclosingRoot(ctx, q, path)
+	if err != nil || best.Root == "" {
 		return Scope{}, false, err
-	}
-	defer rows.Close()
-	var best Scope
-	for rows.Next() {
-		var s Scope
-		if err := rows.Scan(&s.Root, &s.Worktree, &s.ProjectID, &s.Project, &s.Collect, &s.Recall); err != nil {
-			return Scope{}, false, err
-		}
-		if policy.Within(s.Root, path) && len(s.Root) > len(best.Root) {
-			best = s
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return Scope{}, false, err
-	}
-	if best.Root == "" {
-		return Scope{}, false, nil
 	}
 	for dir := path; dir != best.Root && policy.Within(best.Root, dir); dir = filepath.Dir(dir) {
 		if policy.IsRepository(dir) {
@@ -150,6 +126,34 @@ func (c *Core) resolvePath(ctx context.Context, q querier, path string) (Scope, 
 		}
 	}
 	return best, true, nil
+}
+
+// enclosingRoot finds the longest enrolled root containing path, without the
+// nested-repository check, and returns the resolved path.
+func (c *Core) enclosingRoot(ctx context.Context, q querier, path string) (Scope, string, error) {
+	if path == "" || !filepath.IsAbs(path) {
+		return Scope{}, path, nil
+	}
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		path = r
+	}
+	rows, err := q.QueryContext(ctx, `SELECT r.path, r.worktree_id, p.id, p.name, p.collect, p.recall
+		FROM roots r JOIN projects p ON p.id = r.project_id WHERE p.enrolled = 1`)
+	if err != nil {
+		return Scope{}, path, err
+	}
+	defer rows.Close()
+	var best Scope
+	for rows.Next() {
+		var s Scope
+		if err := rows.Scan(&s.Root, &s.Worktree, &s.ProjectID, &s.Project, &s.Collect, &s.Recall); err != nil {
+			return Scope{}, path, err
+		}
+		if policy.Within(s.Root, path) && len(s.Root) > len(best.Root) {
+			best = s
+		}
+	}
+	return best, path, rows.Err()
 }
 
 func (c *Core) scope(ctx context.Context, caller Caller) (Scope, error) {

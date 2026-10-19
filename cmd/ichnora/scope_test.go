@@ -242,3 +242,37 @@ func TestUnrelatedProjectDoesNotAffectResults(t *testing.T) {
 		t.Fatalf("beta's records changed alpha's results:\n%s\n%s", baseline, again)
 	}
 }
+
+// Events of an alpha session that ran in beta, and a child session working in
+// beta, stay unattributed: neither project can retrieve them.
+func TestMixedProjectAndChildSessionsCannotWidenAccess(t *testing.T) {
+	e := newEnv(t, nil)
+	e.enroll(e.alpha, "--collect")
+	e.enroll(e.beta, "--collect")
+	session := "claude-mixed"
+	path := filepath.Join(e.claudeRoot, "p", session+".jsonl")
+	line := func(uuid, cwd, text string) string {
+		b, _ := json.Marshal(map[string]any{"type": "user", "uuid": uuid, "sessionId": session, "timestamp": "2026-10-19T08:00:00Z",
+			"cwd": cwd, "message": map[string]any{"role": "user", "content": text}})
+		return string(b) + "\n"
+	}
+	writeFile(t, path, line("m1", e.alpha, "alpha work on the lexer")+line("m2", e.beta, "beta private roadmap detail")+
+		line("m3", filepath.Join(e.root, "elsewhere"), "unenrolled scratch notes"))
+	e.hook(e.alpha, "claude", map[string]any{"hook_event_name": "Stop", "session_id": session, "transcript_path": path, "cwd": e.alpha})
+	child := filepath.Join(e.claudeRoot, "p", session, "subagents", "agent-9.jsonl")
+	writeFile(t, child, `{"type":"assistant","uuid":"k1","sessionId":"`+session+`","isSidechain":true,"cwd":"`+e.beta+
+		`","message":{"content":[{"type":"text","text":"child read beta private roadmap"}]}}`+"\n")
+	e.hook(e.alpha, "claude", map[string]any{"hook_event_name": "SubagentStop", "session_id": session, "agent_id": "agent-9",
+		"agent_transcript_path": child, "transcript_path": path, "cwd": e.alpha})
+	if s := e.search(e.alpha, "lexer"); s.Totals.Sources != 1 {
+		t.Fatalf("alpha's own event must be retrievable: %+v", s.Totals)
+	}
+	for _, dir := range []string{e.alpha, e.beta} {
+		if s := e.search(dir, "roadmap scratch"); s.Totals.Sources != 0 {
+			t.Fatalf("misattributed events visible from %s: %+v", dir, s.Items)
+		}
+	}
+	if s := e.search(e.alpha, "lexer"); s.Omitted.Unattributed != 3 {
+		t.Fatalf("the attribution gap must be reported: %+v", s.Omitted)
+	}
+}
