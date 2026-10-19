@@ -254,11 +254,11 @@ func (c *Core) Policy(ctx context.Context, caller Caller, req contract.AdminRequ
 	if err != nil {
 		return out, contract.Errf(contract.CodeInvalid, "invalid path")
 	}
-	s, ok, err := c.resolvePath(ctx, c.store.Read(), filepath.Dir(abs))
+	s, _, err := c.enclosingRoot(ctx, c.store.Read(), filepath.Dir(abs))
 	if err != nil {
 		return out, err
 	}
-	if !ok {
+	if s.Root == "" {
 		out.Reason = "not inside an enrolled project"
 		return out, nil
 	}
