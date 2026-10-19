@@ -45,6 +45,10 @@ context from the accepted checkpoint ([tasks](../internal/core/tasks.go)).
 `coding-agents-nix` (`programs.coding-agents.ichnora`); host policy in
 `nixos-host` capabilities `ichnora-service.nix` and `ichnora-client.nix`.
 Owner steps: [operations](../docs/operations.md).
+The NixOS module exports both configured socket paths for CLI discovery;
+otherwise the CLI defaults to per-user XDG runtime sockets. Module evaluation
+covers default/custom paths and disabled-module isolation. Existing login
+sessions need the exports explicitly until a new login after activation.
 
 ## Verification
 

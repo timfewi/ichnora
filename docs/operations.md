@@ -61,6 +61,10 @@ decision. The service starts with no enrolled project and collects nothing.
 
 ## 4. Enroll and collect
 
+The NixOS module exports `ICHNORA_SOCKET` and `ICHNORA_ADMIN_SOCKET` from the
+configured service paths. After activation, start a new login session so plain
+CLI calls use those paths. Existing sessions can set the variables explicitly:
+
 ```sh
 export ICHNORA_ADMIN_SOCKET=/run/ichnora/admin.sock ICHNORA_SOCKET=/run/ichnora/agent.sock
 ichnora discover                                  # candidates only; nothing is read
