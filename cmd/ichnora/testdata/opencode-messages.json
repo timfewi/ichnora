@@ -1,0 +1,32 @@
+[
+  {
+    "id": "msg_0",
+    "type": "user",
+    "time": { "created": 1760864400000 },
+    "content": [
+      { "type": "text", "text": "Review the parser cache change in OpenCode." }
+    ]
+  },
+  {
+    "id": "msg_1",
+    "type": "assistant",
+    "time": { "created": 1760864405000 },
+    "model": { "providerID": "fixture", "id": "model" },
+    "content": [
+      { "type": "reasoning", "text": "HIDDEN_REASONING_MARKER" },
+      { "type": "text", "text": "The cache key now includes the digest." },
+      {
+        "type": "tool",
+        "id": "tool_1",
+        "name": "bash",
+        "state": {
+          "status": "completed",
+          "input": {
+            "command": "go test ./parser SYNTHETIC_SECRET_MARKER_TOOLINPUT"
+          },
+          "output": "SYNTHETIC_SECRET_MARKER_TOOLOUTPUT"
+        }
+      }
+    ]
+  }
+]
