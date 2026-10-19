@@ -276,3 +276,55 @@ func TestMixedProjectAndChildSessionsCannotWidenAccess(t *testing.T) {
 		t.Fatalf("the attribution gap must be reported: %+v", s.Omitted)
 	}
 }
+
+// Every read operation stays within its byte budget with valid JSON, even
+// with a maximal project name, Unicode and many omissions.
+func TestBudgetsAcrossOperations(t *testing.T) {
+	e := newEnv(t, nil)
+	e.must(e.root, "", "enroll", e.alpha, "--name", strings.Repeat("ä", 32))
+	var claims []contract.ClaimInput
+	for i := 0; i < 20; i++ {
+		claims = append(claims, contract.ClaimInput{Kind: "observation", Title: "Ünïcödé budget probe 😀 " + itoaT(int64(i)),
+			Body: strings.Repeat("Großer Inhalt 字 ", 200), Support: []contract.Ref{{Kind: "file", Path: "parser/cache.go"}}})
+	}
+	ids := e.captureIDs(e.alpha, claims...)
+	r := e.must(e.alpha, checkpointJSON(t, contract.Checkpoint{NextAction: strings.Repeat("ß", 500), Objective: strings.Repeat("o", 3000),
+		Remaining: []string{strings.Repeat("r", 1000), strings.Repeat("s", 1000)}}), "task", "create", "--title", strings.Repeat("T", 200), "--checkpoint-stdin")
+	var task contract.TaskResult
+	r.into(t, &task)
+	for _, args := range [][]string{
+		{"search", "budget probe", "--limit", "50"},
+		append([]string{"read"}, ids...),
+		{"evidence", ids[0]},
+		{"resume", task.Task.ID},
+		{"status"},
+	} {
+		for _, budget := range []string{"1024", "1500", "4096"} {
+			r := e.must(e.alpha, "", append(args, "--max-bytes", budget)...)
+			if len(r.Raw) > atoiT(budget) || !json.Valid([]byte(r.Raw)) {
+				t.Fatalf("%s at %s: %d bytes", args[0], budget, len(r.Raw))
+			}
+			if budget == "1024" && strings.Contains(r.Raw, `"complete":true`) && args[0] != "evidence" {
+				t.Fatalf("%s at 1024 claims completeness: %s", args[0], r.Raw)
+			}
+		}
+	}
+}
+
+// A dirty worktree: HEAD is unchanged but the file differs, so the claim is stale.
+func TestDirtyWorktreeIsNotCurrent(t *testing.T) {
+	e := newEnv(t, nil)
+	e.enroll(e.alpha)
+	cache := filepath.Join(e.alpha, "parser", "cache.go")
+	id := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "observation", Title: "Key returns v1",
+		Support: []contract.Ref{{Kind: "file", Path: "parser/cache.go"}},
+		Depends: []contract.Ref{{Kind: "revision", Value: "current"}, {Kind: "file", Path: "parser/cache.go", SHA256: sha(t, cache)}}})[0]
+	if it := find(e.search(e.alpha, "key returns").Items, id); it == nil || it.Applicability != "current" {
+		t.Fatalf("clean claim must be current: %+v", it)
+	}
+	writeFile(t, cache, "package parser\n\nfunc Key() string { return \"uncommitted\" }\n")
+	r := e.must(e.alpha, "", "read", id)
+	if !strings.Contains(r.Raw, `"applicability":"stale"`) || !strings.Contains(r.Raw, "revision unchanged") || !strings.Contains(r.Raw, "file changed: parser/cache.go") {
+		t.Fatalf("an uncommitted change must make the claim stale despite an unchanged HEAD: %s", r.Raw)
+	}
+}
