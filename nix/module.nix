@@ -192,6 +192,12 @@ in
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
+    # Plain CLI calls must reach the same sockets as the configured service,
+    # including when the host overrides the module's default paths.
+    environment.variables = {
+      ICHNORA_SOCKET = cfg.agentSocket;
+      ICHNORA_ADMIN_SOCKET = cfg.adminSocket;
+    };
 
     systemd = {
       tmpfiles.rules = [

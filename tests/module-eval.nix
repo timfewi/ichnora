@@ -35,6 +35,17 @@ let
     };
   };
   disabled = mkConfig { enable = false; };
+  custom = mkConfig {
+    agentSocket = "/run/custom-memory/reader.sock";
+    adminSocket = "/run/custom-memory/owner.sock";
+  };
+  clientSocketsMatch =
+    host:
+    host.environment.variables.ICHNORA_SOCKET or null
+    == host.services.ichnora.generatedConfig.agent_socket
+    &&
+      host.environment.variables.ICHNORA_ADMIN_SOCKET or null
+      == host.services.ichnora.generatedConfig.admin_socket;
   service = plain.systemd.services.ichnora;
   exec = service.serviceConfig.ExecStart;
   generated = plain.services.ichnora.generatedConfig;
@@ -56,6 +67,10 @@ if
   && described.systemd.services ? ichnora-environment
   && describedConfig.environment_descriptor == "/run/ichnora-environment/environment.json"
   && !(disabled.systemd.services ? ichnora)
+  && clientSocketsMatch plain
+  && clientSocketsMatch custom
+  && !(disabled.environment.variables ? ICHNORA_SOCKET)
+  && !(disabled.environment.variables ? ICHNORA_ADMIN_SOCKET)
 then
   pkgs.runCommand "ichnora-module-eval" { } ''
     touch "$out"
