@@ -58,10 +58,12 @@ runtime. The scenario inventory is [acceptance](../docs/acceptance.md).
 
 Phase: 7 of 7 (hand-off). Phases 1–6 are implemented and verified at the
 levels in the acceptance inventory. Pins: Go 1.26.7 and SQLite 3.53.3 from
-nixpkgs `eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. Local commits only:
-no remote exists. `coding-agents-nix` has the registration staged, uncommitted;
-`nixos-host` has the capabilities committed locally (not pushed, not imported).
+nixpkgs `eaad0894`, go-sqlite3 v1.14.52, MCP go-sdk v1.8.0. Private remote
+`timfewi/ichnora`. `coding-agents-nix` 1c48468 registers the bridge;
+`nixos-host` f2749da pins ichnora 8d254f2 and imports the capabilities on
+memorycrime (host nixpkgs: Go 1.26.8). The memorycrime closure is built and its
+package checkPhase passed the acceptance suite; switching needs the owner's
+sudo. Hooks and enrollment stay off until the owner opts in.
 One test-service panic was seen once during development and not reproduced in
 ten later runs; a concurrent listener-list race was fixed, root cause unconfirmed.
-Open: private remote, Nix package build, publishing the coding-agents change,
-host input/lock and activation, live harness runs, owner enrollment.
+Open: switch and service read-back, live harness runs, owner enrollment.
