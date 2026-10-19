@@ -7,7 +7,7 @@
     "cmd/ichnora/main.go": "c3607ef6bea275c21a3bd0b3055759591ad84942c463bca50f0eb6c7730850ab",
     "cmd/ichnora/serve.go": "bc985a044ef5f6e2bb91726b531300d95f1eae9c7bd7480cea680d6b82bf1715",
     "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-    "docs/acceptance.md": "1c2fffce0972cb35edd68e968b0a97ee5bbcad45a4661ec85bb72edb6812b504",
+    "docs/acceptance.md": "2f6b5e89929b5c5105c0fb6c90834f50554305ce88b6930bc400caf3688313fb",
     "docs/adapters.md": "f260b20ba24502755400c94a9c849d4a3626624364da15e86bf7c76d55c8b551",
     "docs/architecture.md": "cfa758d08836344abc609960757842de34d6ea1c3ae4ac75ddff8ef40de381be",
     "docs/contract.md": "291802295c3009b56ac6763d3a80458e2e38add8f869b48b1565ec235535a61b",
@@ -75,11 +75,11 @@
           }
         },
         "entry/2-verification-1": {
-          "fingerprint": "bcfa938ffba461e39a70acb682ad0d8d5275d8186b09fc128e985a28a769b5b5",
+          "fingerprint": "e4d3a7bb7446a12410f97ab3864bb30cf7617c25d81e2332fea2efd1d351b951",
           "sources": {
             ".project-checks.json": "91497601df8bc36c7314b429603276fe62f86beea7a642cf018a0630951f9c39",
             "cmd/ichnora/stale_test.go": "fd7704b742a9d120038c6dc2d7eacbf5dc7f6abf658da9900f7cdceed6a0c009",
-            "docs/acceptance.md": "1c2fffce0972cb35edd68e968b0a97ee5bbcad45a4661ec85bb72edb6812b504"
+            "docs/acceptance.md": "2f6b5e89929b5c5105c0fb6c90834f50554305ce88b6930bc400caf3688313fb"
           }
         },
         "entry/2-progress-checkpoint-1": {

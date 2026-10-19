@@ -45,6 +45,17 @@ noted. All listed tests pass under `project-check fast` (2026-10-19).
 | Host activation, enrollment of real projects, historical import                                                                                                                                 | —                                                                                                                                     | open               |
 | Model-quality and cost evaluation against a baseline                                                                                                                                            | —                                                                                                                                     | open               |
 
+## Synthetic retrieval measurement
+
+`TestMeasureSyntheticRetrieval` (opt-in) meters CLI calls with
+`agent-tool-meter` (report v2) against the test service: 40 decisions, one
+ingested transcript, one task; 5 calls per label; log kept outside the
+repository. Per-call means on 2026-10-19, including process start of the test
+binary: search index 4615 B / 9 ms, search with query 4825 B / 9 ms, search at
+`--max-bytes 1024` 716 B / 11 ms, resume 2073 B / 7 ms, read of 20 IDs 7977 B
+/ 9 ms. These are output bytes on synthetic data, not model tokens, and say
+nothing about task results or provider usage.
+
 Mutation checks (temporarily breaking a guard and rerunning the owning test)
 confirmed that the tests detect: superseded claims shown as working, a missing
 project filter, injected context kept, a missing revision precondition, lost
