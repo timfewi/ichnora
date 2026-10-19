@@ -752,6 +752,12 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 	res := &contract.EvidenceResult{ID: req.ID, Status: cl.Status, Applicability: v.state, Checks: []contract.SupportCheck{},
 		Gaps: []string{}, Complete: true, Notice: Notice, Budget: contract.BudgetInfo{MaxBytes: budget, Unit: contract.BudgetUnit}}
 	root := ev.roots[cl.Worktree]
+	// Sharing a claim shares its statement and validation, not the origin
+	// project's source text.
+	shared := cl.Project != s.ProjectID
+	if shared {
+		res.Gaps = append(res.Gaps, "excerpts withheld: claim shared from another project")
+	}
 	for _, r := range refs {
 		chk := contract.SupportCheck{Role: r.Role, Kind: r.Kind, Ref: r.Ref, Stored: raw(r.Detail), State: r.State}
 		if r.State == "lost" {
@@ -770,8 +776,10 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 				chk.Validation = "invalidated: " + invalid
 			default:
 				chk.Validation = "present"
-				ex, _ := contract.Truncate(text, 2048)
-				chk.Excerpt = raw(map[string]string{"text": ex})
+				if !shared {
+					ex, _ := contract.Truncate(text, 2048)
+					chk.Excerpt = raw(map[string]string{"text": ex})
+				}
 			}
 		case "claim":
 			var status string
@@ -781,7 +789,7 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 				chk.Validation = "source claim " + status
 			}
 		case "file", "ast":
-			c.fileEvidence(ctx, ev, root, r, req.ExcerptLines, &chk, res)
+			c.fileEvidence(ctx, ev, root, r, req.ExcerptLines, !shared, &chk, res)
 		case "revision", "environment", "tabula":
 			dv := verdict{state: ApCurrent}
 			ev.dep(&dv, root, r.Detail)
@@ -801,7 +809,7 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 	return res, budget, nil
 }
 
-func (c *Core) fileEvidence(ctx context.Context, ev *evaluator, root string, r refRow, lines int, chk *contract.SupportCheck, res *contract.EvidenceResult) {
+func (c *Core) fileEvidence(ctx context.Context, ev *evaluator, root string, r refRow, lines int, excerpt bool, chk *contract.SupportCheck, res *contract.EvidenceResult) {
 	if root == "" {
 		chk.Validation = "unknown: worktree root no longer mapped"
 		return
@@ -817,6 +825,9 @@ func (c *Core) fileEvidence(ctx context.Context, ev *evaluator, root string, r r
 		chk.Current = f.digest
 	default:
 		chk.Validation = "unchanged"
+	}
+	if !excerpt {
+		return
 	}
 	// Exact excerpts come from agent-evidence with the stored digest as guard.
 	start := r.Detail.Line

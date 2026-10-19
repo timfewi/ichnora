@@ -159,6 +159,13 @@ func TestRevocationRolesAndMCPParity(t *testing.T) {
 	if find(e.search(e.beta, "UTC timestamps").Items, shared) != nil {
 		t.Fatal("revoked claim still recalled")
 	}
+	// Sharing a claim does not share the origin project's source text.
+	evidenced := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "observation", Title: "Parser cache key comment",
+		Support: []contract.Ref{{Kind: "file", Path: "parser/cache.go", Line: 3}}})[0]
+	e.must(e.root, "", "share", evidenced, "--to", beta)
+	if r := e.must(e.beta, "", "evidence", evidenced); strings.Contains(r.Raw, `"excerpt"`) || !strings.Contains(r.Raw, "excerpts withheld") {
+		t.Fatalf("shared evidence leaked origin excerpts: %s", r.Raw)
+	}
 
 	// Agent socket roles cannot administer.
 	for _, args := range [][]string{{"enroll", e.beta}, {"withdraw", "alpha"}, {"share", shared, "--to", beta}, {"projects"}} {

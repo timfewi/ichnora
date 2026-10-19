@@ -208,6 +208,9 @@ func TestEnrollmentAndSourceBoundaries(t *testing.T) {
 	if err := os.Symlink(filepath.Join(e.root, "outside.txt"), filepath.Join(e.alpha, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(filepath.Join(nested, "lib.go"), filepath.Join(e.alpha, "lib-link.go")); err != nil {
+		t.Fatal(err)
+	}
 	worktree := filepath.Join(e.ws, "alpha-wt")
 	writeFile(t, filepath.Join(worktree, ".git"), "gitdir: "+filepath.Join(e.alpha, ".git", "worktrees", "wt")+"\n")
 
@@ -239,6 +242,7 @@ func TestEnrollmentAndSourceBoundaries(t *testing.T) {
 		filepath.Join(e.alpha, "node_modules", "x.js"): "dependency tree",
 		filepath.Join(e.alpha, ".env"):                 "credential store",
 		filepath.Join(e.alpha, "link.txt"):             "outside the project root",
+		filepath.Join(e.alpha, "lib-link.go"):          "nested repository",
 		filepath.Join(nested, "lib.go"):                "nested repository",
 		filepath.Join(gamma, "x"):                      "not inside an enrolled project",
 	} {

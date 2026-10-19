@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,6 +40,7 @@ type peer struct {
 type Server struct {
 	core    *core.Core
 	log     *slog.Logger
+	mu      sync.Mutex
 	servers []*http.Server
 	sem     chan struct{}
 }
@@ -91,7 +93,9 @@ func (s *Server) Serve(ln net.Listener, roles []contract.Role) error {
 		},
 		ErrorLog: slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
 	}
+	s.mu.Lock()
 	s.servers = append(s.servers, srv)
+	s.mu.Unlock()
 	err := srv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
@@ -101,7 +105,10 @@ func (s *Server) Serve(ln net.Listener, roles []contract.Role) error {
 
 // Shutdown stops all listeners and waits for in-flight requests.
 func (s *Server) Shutdown(ctx context.Context) {
-	for _, srv := range s.servers {
+	s.mu.Lock()
+	servers := append([]*http.Server(nil), s.servers...)
+	s.mu.Unlock()
+	for _, srv := range servers {
 		_ = srv.Shutdown(ctx)
 	}
 }
