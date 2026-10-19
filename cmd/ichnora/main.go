@@ -259,6 +259,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return call(false, "status", contract.StatusRequest{MaxBytes: c.maxBytes})
 	case "hook":
+		var noContext bool
+		fs.BoolVar(&noContext, "no-context", false, "capture only; never inject context (native memory owns recall)")
 		pos, ok := parse()
 		if !ok || len(pos) != 1 {
 			return 2
@@ -267,7 +269,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if err != nil {
 			cl = server.Client{}
 		}
-		hook.Run(ctx, cl, pos[0], stdin, stdout)
+		hook.Run(ctx, cl, pos[0], noContext || os.Getenv("ICHNORA_HOOK_CONTEXT") == "off", stdin, stdout)
 		return 0
 	case "mcp":
 		var role string

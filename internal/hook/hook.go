@@ -21,8 +21,10 @@ const maxInput = 1 << 20
 // quiet events are frequent; failures there are reported at the next start.
 var quiet = map[string]bool{"Stop": true, "PostToolUse": true, "UserPromptSubmit": true}
 
-// Run forwards one hook payload and writes the harness-native output.
-func Run(ctx context.Context, client server.Client, harness string, in io.Reader, out io.Writer) {
+// Run forwards one hook payload and writes the harness-native output. With
+// noContext the event is still captured but nothing is injected, for hosts
+// where native memory owns automatic recall.
+func Run(ctx context.Context, client server.Client, harness string, noContext bool, in io.Reader, out io.Writer) {
 	payload, err := io.ReadAll(io.LimitReader(in, maxInput+1))
 	var native struct {
 		Event string `json:"hook_event_name"`
@@ -38,6 +40,14 @@ func Run(ctx context.Context, client server.Client, harness string, in io.Reader
 		// The plugin parses the contract response itself.
 		if raw == nil {
 			raw = contract.EncodeError("hook", perr)
+		} else if noContext {
+			var env map[string]any
+			if json.Unmarshal(raw, &env) == nil {
+				if result, ok := env["result"].(map[string]any); ok {
+					delete(result, "context")
+				}
+				raw, _ = contract.Marshal(env)
+			}
 		}
 		_, _ = out.Write(raw)
 		return
@@ -57,6 +67,9 @@ func Run(ctx context.Context, client server.Client, harness string, in io.Reader
 		Result contract.HookResult `json:"result"`
 	}
 	_ = json.Unmarshal(raw, &resp)
+	if noContext {
+		resp.Result.Context = ""
+	}
 	msg := ""
 	if resp.Result.Paused && !quiet[native.Event] {
 		msg = "Ichnora ingestion is paused at its storage limit; events will be reconciled after space is freed."

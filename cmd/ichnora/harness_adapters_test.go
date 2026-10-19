@@ -280,3 +280,21 @@ func TestUnavailableServiceAndHostileInputs(t *testing.T) {
 		t.Fatalf("MCP error code: %+v", decoded)
 	}
 }
+
+// When native memory owns recall, hooks still capture but never inject.
+func TestHookNoContextKeepsCapture(t *testing.T) {
+	e := newEnv(t, nil)
+	e.enroll(e.alpha, "--collect", "--recall")
+	t.Setenv("ICHNORA_HOOK_CONTEXT", "off")
+	out := e.hook(e.alpha, "claude", map[string]any{"hook_event_name": "SessionStart", "source": "startup", "session_id": "nc", "cwd": e.alpha})
+	if out != "" {
+		t.Fatalf("no context may be injected: %q", out)
+	}
+	out = e.hook(e.alpha, "opencode", map[string]any{"event": "context", "sessionID": "oc-nc", "directory": e.alpha, "want_context": true, "messages": []any{}})
+	if strings.Contains(out, "ichnora-context") || !strings.Contains(out, `"recorded":true`) {
+		t.Fatalf("OpenCode capture without context: %s", out)
+	}
+	if count(e.must(e.alpha, "", "status").Raw, "sessions") != 2 {
+		t.Fatal("events were not captured")
+	}
+}
