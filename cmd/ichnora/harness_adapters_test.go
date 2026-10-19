@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -296,5 +297,46 @@ func TestHookNoContextKeepsCapture(t *testing.T) {
 	}
 	if count(e.must(e.alpha, "", "status").Raw, "sessions") != 2 {
 		t.Fatal("events were not captured")
+	}
+}
+
+// TestMain lets helper scripts run the CLI from the test binary itself.
+func TestMain(m *testing.M) {
+	if os.Getenv("ICHNORA_TEST_MAIN") == "1" {
+		os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
+	os.Exit(m.Run())
+}
+
+// TestOpenCodePluginInEmbeddedRuntime executes the shipped plugin with the
+// pinned OpenCode binary's own runtime against the real service. It runs only
+// when ICHNORA_OPENCODE_RUNTIME names that binary.
+func TestOpenCodePluginInEmbeddedRuntime(t *testing.T) {
+	runtime := os.Getenv("ICHNORA_OPENCODE_RUNTIME")
+	if runtime == "" {
+		t.Skip("set ICHNORA_OPENCODE_RUNTIME to the OpenCode executable")
+	}
+	e := newEnv(t, nil)
+	e.enroll(e.alpha, "--collect", "--recall")
+	self, _ := os.Executable()
+	bin := filepath.Join(e.root, "bin", "ichnora")
+	writeScript(t, bin, "#!/bin/sh\nICHNORA_TEST_MAIN=1 exec "+self+" \"$@\"\n")
+	plugin, _ := filepath.Abs(filepath.Join(testdataAbs, "..", "..", "..", "adapters", "opencode", "index.js"))
+	cmd := exec.Command(runtime, filepath.Join(testdataAbs, "opencode-plugin-harness.mjs"))
+	cmd.Env = append(os.Environ(), "BUN_BE_BUN=1", "ICHNORA_BIN="+bin, "PLUGIN_PATH="+plugin, "SESSION_DIR="+e.alpha,
+		"MESSAGES="+filepath.Join(testdataAbs, "opencode-messages.json"), "ICHNORA_SOCKET="+e.cfg.AgentSocket, "ICHNORA_HOOK_CONTEXT=")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("plugin harness: %v %s", err, out)
+	}
+	var res struct{ First, Second, Compaction []string }
+	if err := json.Unmarshal(out, &res); err != nil {
+		t.Fatalf("plugin output %s", out)
+	}
+	if len(res.First) != 1 || !strings.Contains(res.First[0], "<ichnora-context") || len(res.Second) != 0 || len(res.Compaction) != 1 {
+		t.Fatalf("plugin injection: %+v", res)
+	}
+	if s := e.search(e.alpha, "digest OpenCode review"); s.Totals.Sources != 1 {
+		t.Fatalf("plugin-forwarded messages must be ingested once: %+v", s.Totals)
 	}
 }

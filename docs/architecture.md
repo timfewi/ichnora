@@ -19,8 +19,8 @@ framework, graph or vector service, model client or Node.js dependency.
 ## One executable
 
 `ichnora` has subcommands for the service (`serve`), the user CLI, the MCP
-bridge (`mcp`), harness hooks (`hook`) and offline maintenance (`restore`,
-`migrate`). Domain types live in `internal/contract`; business logic in
+bridge (`mcp`), harness hooks (`hook`) and offline maintenance (`restore`).
+Domain types live in `internal/contract`; business logic in
 `internal/core`; SQLite access in `internal/store`; source policy in
 `internal/policy`; native-format adapters in `internal/ingest`; the socket
 transport in `internal/server`; external evidence tools in `internal/evidence`.
@@ -40,9 +40,14 @@ belongs to systemd (host capability), not to an agent session.
   and a bounded page cache; the writer also sets `journal_mode=WAL` and
   `synchronous=FULL` so an acknowledged checkpoint is durable.
 - Numbered SQL migrations are embedded with `go:embed` and applied in one
-  transaction each. A database newer than the binary is refused.
+  transaction each whenever the database is opened. A database newer than the
+  binary is refused.
 - `serve` holds an exclusive lock file in the state directory. Offline
-  `restore` and `migrate` take the same lock, so they cannot race the service.
+  `restore` takes the same lock, so it cannot race the service.
+- Cursors and confirmation tokens bind a scope generation: the policy
+  generation (enrollment, sharing) plus the generations of the caller's
+  project and of projects sharing into it. Writes in an unrelated project do
+  not change another caller's results or cursors.
 - Backups use `VACUUM INTO` through the service (consistent snapshot, 0600).
 
 `GOMEMLIMIT` is not set by the binary; the host cgroup enforces memory.
@@ -113,8 +118,11 @@ them through their public CLIs with absolute executables from configuration,
 bounded time and output, and outside write transactions. A missing tool yields a
 `missing_adapter` outcome; Ichnora's own SHA-256 file digests still decide
 applicability. AST row IDs are never stored as identities; references keep
-file path, digest, symbol and location. Tabula references keep card, section
-id, section fingerprint and source hashes; a renamed or changed section is stale.
+file path, digest, symbol and location. The AST snapshot generation is kept
+only as provenance: `ast-index` increments it on every refresh, even without
+changes (observed 1 → 2 → 3 on a synthetic repository), so validity follows
+the file digest. Tabula references keep card, section id, section fingerprint
+and source path; a renamed or changed section is stale.
 
 ## Host environment boundary
 
@@ -131,7 +139,7 @@ coordinator, per-activation store or session termination.
 
 Source records, derived claims, checkpoints and the FTS projection share one
 SQLite file. Deletion is an explicit admin action with a dry-run preview and a
-confirmation token bound to the database generation. It writes tombstones that
+confirmation token bound to the policy and affected project generations. It writes tombstones that
 ingestion replay respects, marks dependent claim support as lost and
 recomputes their status, removes FTS rows, then truncates the WAL. With
 `secure_delete` freed pages are zeroed, but copy-on-write filesystems, SSD

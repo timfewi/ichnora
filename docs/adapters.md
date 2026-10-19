@@ -39,5 +39,11 @@ Status reports the declared matrix plus observed boundary counts per project.
 - Ichnora can stop re-injecting context; it cannot remove text already in a
   running conversation. Context refresh happens only at the boundaries above;
   otherwise a fresh conversation is needed.
-- OpenCode context injection through `system` has been exercised with fixtures
-  only; the plugin falls back to no injection if the hook rejects it.
+- The OpenCode plugin was executed in the pinned binary's embedded runtime
+  (Bun 1.4.2 via `BUN_BE_BUN=1`) with a stand-in plugin context against the
+  real service. OpenCode's plugin loader, its `session.get` result shape and
+  its handling of plain strings in `system` were not observed live; the plugin
+  falls back to no injection if they differ.
+- Hook scope comes from the hook process's working directory, which the
+  harnesses are expected to set to the session directory; this has been
+  fixture-tested, not observed in a live client.
