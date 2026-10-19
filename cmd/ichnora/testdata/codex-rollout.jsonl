@@ -1,0 +1,10 @@
+{"timestamp":"2026-10-19T09:00:00.000Z","type":"session_meta","payload":{"id":"__SESSION__","timestamp":"2026-10-19T09:00:00.000Z","cwd":"__CWD__","originator":"codex_cli_rs","cli_version":"0.163.0","source":"cli"}}
+{"timestamp":"2026-10-19T09:00:01.000Z","type":"turn_context","payload":{"cwd":"__CWD__","model":"fixture-model"}}
+{"timestamp":"2026-10-19T09:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>fixture environment</environment_context>"}]}}
+{"timestamp":"2026-10-19T09:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Continue the parser cache task from the other harness."}]}}
+{"timestamp":"2026-10-19T09:00:04.000Z","type":"response_item","payload":{"type":"reasoning","summary":[],"encrypted_content":"HIDDEN_REASONING_MARKER"}}
+{"timestamp":"2026-10-19T09:00:05.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"go test ./parser SYNTHETIC_SECRET_MARKER_TOOLINPUT\"}","call_id":"call_1"}}
+{"timestamp":"2026-10-19T09:00:06.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"{\"output\":\"FAIL SYNTHETIC_SECRET_MARKER_TOOLOUTPUT\",\"metadata\":{\"exit_code\":1}}"}}
+{"timestamp":"2026-10-19T09:00:07.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The parser test fails because the cache key misses the digest."}]}}
+{"timestamp":"2026-10-19T09:00:08.000Z","type":"event_msg","payload":{"type":"agent_message","message":"duplicate of the assistant message"}}
+{"timestamp":"2026-10-19T09:00:09.000Z","type":"compacted","payload":{"message":"COMPACTION_SUMMARY_MARKER","replacement_history":[]}}

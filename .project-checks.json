@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "name": "format",
+      "argv": ["just", "fmt-check"],
+      "requires": [
+        "just",
+        "python3",
+        "rg",
+        "nixfmt",
+        "shfmt",
+        "prettier",
+        "gofmt"
+      ],
+      "timeout_seconds": 120,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "go-vet",
+      "argv": ["go", "vet", "-tags", "libsqlite3", "./..."],
+      "requires": ["go", "gcc"],
+      "timeout_seconds": 300,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "go-test",
+      "argv": [
+        "go",
+        "test",
+        "-tags",
+        "libsqlite3",
+        "-count=1",
+        "-timeout",
+        "240s",
+        "./..."
+      ],
+      "requires": ["go", "gcc"],
+      "timeout_seconds": 300,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "statix",
+      "argv": ["statix", "check", "."],
+      "requires": ["statix"],
+      "timeout_seconds": 120,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "deadnix",
+      "argv": ["deadnix", "--fail", "."],
+      "requires": ["deadnix"],
+      "timeout_seconds": 120,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "flake-eval",
+      "argv": [
+        "nix",
+        "flake",
+        "check",
+        "--offline",
+        "--all-systems",
+        "--no-build",
+        "--no-write-lock-file",
+        "."
+      ],
+      "requires": ["nix"],
+      "timeout_seconds": 300,
+      "profiles": ["fast"]
+    },
+    {
+      "name": "flake-check",
+      "argv": [
+        "nix",
+        "flake",
+        "check",
+        "--all-systems",
+        "--no-write-lock-file",
+        "."
+      ],
+      "requires": ["nix"],
+      "timeout_seconds": 1800,
+      "profiles": ["full"]
+    }
+  ],
+  "watch_ignore": [".direnv", "result", "result-*"]
+}
