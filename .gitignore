@@ -1,4 +1,5 @@
 .direnv/
+.tabula/
 result
 result-*
 __pycache__/

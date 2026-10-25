@@ -1,0 +1,208 @@
+ichnora licensing and third-party notices
+========================================
+
+Original project
+----------------
+
+ichnora
+Copyright 2026 timfewi
+https://github.com/timfewi/ichnora
+
+Original ichnora source code and documentation are licensed under the Apache
+License, Version 2.0 (the "License"); you may not use them except in compliance
+with the License. You may obtain a copy of the License in the accompanying
+LICENSE file or at https://www.apache.org/licenses/LICENSE-2.0.
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+Third-party components retain their own copyrights and licenses. The root
+Apache-2.0 license does not relicense them. This notice is informational and
+does not change any upstream license terms.
+
+Scope and redistribution
+------------------------
+
+This bundle covers the production Go modules pinned in go.mod, Go runtime and
+standard-library code, and Go-derived code in those modules for the ichnora
+executable built by nix/package.nix. It retains module-level licenses even
+where the linker can omit unused code. Dependency tests, examples, fuzzing
+programs, and documentation are not installed by that recipe. In particular,
+this is not a distribution of the MCP SDK's CC-BY-4.0 documentation.
+
+The Nix package installs LICENSE, this file, and the accompanying LICENSES/
+directory in share/doc/ichnora. Keep those materials with redistributed binary
+packages; license terms and copyright notices are in the referenced files,
+not merely at the upstream links below. No license material is downloaded or
+generated at runtime or during package installation.
+
+This source release and bundle do not purport to distribute or document the
+licenses of an entire Nix system closure. Source-only development tools,
+compilers as executables, and separately packaged system libraries retain
+their own licenses. Redistributors supplying those additional components
+must also supply their applicable notices. SQLite is discussed separately
+below because the Nix binary links against libsqlite3.
+
+Pinned production modules
+-------------------------
+
+1. github.com/mattn/go-sqlite3 v1.14.52
+   https://github.com/mattn/go-sqlite3/tree/v1.14.52
+   MIT: LICENSES/go-sqlite3-LICENSE.txt (upstream LICENSE, unchanged).
+   Copyright (c) 2014 Yasuhiro Matsumoto
+
+   convert.go is extracted from Go's database/sql source and carries:
+   Copyright 2011 The Go Authors. All rights reserved.
+   Use of this source code is governed by a BSD-style
+   license that can be found in the LICENSE file.
+
+   The Go BSD terms are supplied in LICENSES/Go-BSD-3-Clause.txt, in addition
+   to the driver's MIT license. SQLite itself is not relicensed by the driver.
+
+2. github.com/modelcontextprotocol/go-sdk v1.8.0
+   https://github.com/modelcontextprotocol/go-sdk/tree/v1.8.0
+   LICENSES/go-sdk-LICENSE.txt is the complete, unchanged upstream LICENSE,
+   including its licensing-transition statement, Apache-2.0 terms, MIT
+   terms, and documentation-specific CC-BY-4.0 statement.
+
+   This is mixed licensing, NOT a choice of MIT OR Apache-2.0 for all code:
+   new contributions and contributions with relicensing consent are under
+   Apache-2.0; MIT contributions without that consent remain under MIT.
+   Non-specification documentation is under CC-BY-4.0 and is not shipped here.
+
+   Upstream LICENSE copyright:
+   Copyright (c) 2024-2025 Model Context Protocol a Series of LF Projects, LLC.
+
+   Additional upstream production-source copyright notices:
+   Copyright 2018 The Go MCP SDK Authors. All rights reserved.
+   Copyright 2019 The Go MCP SDK Authors. All rights reserved.
+   Copyright 2025 The Go MCP SDK Authors. All rights reserved.
+   Copyright 2026 The Go MCP SDK Authors. All rights reserved.
+
+   These occur in internal/jsonrpc2, internal/xcontext, the main SDK source,
+   and auth/oauthex source respectively. Their applicable terms remain those
+   described by upstream LICENSE and source-file headers.
+
+3. github.com/google/jsonschema-go v0.4.3
+   https://github.com/google/jsonschema-go/tree/v0.4.3
+   MIT: LICENSES/jsonschema-go-LICENSE.txt (upstream LICENSE, unchanged).
+   Copyright (c) 2025 JSON Schema Go Project Authors
+
+   jsonschema/util.go's equalValue function is copied from Go's
+   src/reflect/deepequal.go with modifications, as its source comment records.
+   That Go source carries:
+   Copyright 2009 The Go Authors. All rights reserved.
+   Use of this source code is governed by a BSD-style
+   license that can be found in the LICENSE file.
+
+   The Go BSD terms are supplied in LICENSES/Go-BSD-3-Clause.txt as well.
+
+4. github.com/segmentio/asm v1.1.3
+   https://github.com/segmentio/asm/tree/v1.1.3
+   MIT: LICENSES/segmentio-asm-LICENSE.txt (upstream LICENSE, unchanged).
+   Copyright (c) 2021 Segment
+
+5. github.com/segmentio/encoding v0.5.4
+   https://github.com/segmentio/encoding/tree/v0.5.4
+   MIT: LICENSES/segmentio-encoding-LICENSE.txt (upstream LICENSE, unchanged).
+   Copyright (c) 2019 Segment.io, Inc.
+
+   json/codec.go's duration-formatting implementation carries:
+   Copyright 2009 The Go Authors. All rights reserved.
+   Use of this source code is governed by a BSD-style
+   license that can be found in the LICENSE file.
+
+   json/codec.go also identifies noescape as copied from the Go runtime;
+   internal/runtime_reflect/map.go identifies its iterator structure as
+   copied from src/runtime/map.go. LICENSES/Go-BSD-3-Clause.txt supplies the
+   Go BSD terms for Go-derived code. Dependency test and fuzzing code is not
+   part of this installed executable package.
+
+6. github.com/yosida95/uritemplate/v3 v3.0.2
+   https://github.com/yosida95/uritemplate/tree/v3.0.2
+   BSD-3-Clause: LICENSES/uritemplate-LICENSE.txt
+   (upstream LICENSE, unchanged).
+   Copyright (C) 2016, Kohei YOSHIDA <https://yosida95.com/>. All rights reserved.
+
+7. golang.org/x/oauth2 v0.35.0
+   https://go.googlesource.com/oauth2/+/refs/tags/v0.35.0
+8. golang.org/x/sync v0.20.0
+   https://go.googlesource.com/sync/+/refs/tags/v0.20.0
+9. golang.org/x/sys v0.41.0
+   https://go.googlesource.com/sys/+/refs/tags/v0.41.0
+10. golang.org/x/time v0.15.0
+    https://go.googlesource.com/time/+/refs/tags/v0.15.0
+
+   All four carry the same BSD-3-Clause LICENSE text:
+   Copyright 2009 The Go Authors.
+   Their complete, unchanged LICENSE text is supplied once in
+   LICENSES/Go-BSD-3-Clause.txt.
+
+   The identical additional patent grant shipped in x/sync, x/sys, and
+   x/time is supplied in LICENSES/Go-PATENTS.txt. The pinned oauth2 module
+   does not include a PATENTS file; this bundle does not invent one for it.
+
+Go runtime and standard library
+-------------------------------
+
+Go 1.26.7: https://go.googlesource.com/go/+/refs/tags/go1.26.7
+Copyright 2009 The Go Authors.
+
+The compiled executable includes Go runtime and standard-library code under
+Go's BSD-style license, reproduced in LICENSES/Go-BSD-3-Clause.txt. The Go
+additional patent grant is in LICENSES/Go-PATENTS.txt. These same license and
+patent texts accompany the Go subrepositories vendored in the standard library
+(including golang.org/x/crypto, x/net, x/sys, and x/text).
+
+LICENSES/Go-SUPPLEMENTAL-NOTICES.txt additionally retains verbatim upstream
+notices for Inferno-derived runtime memory operations (Lucent Technologies,
+Vita Nuova Holdings, and The Go Authors), Sun Microsystems-derived math code,
+and fiat-crypto-derived cryptographic code. Source locations are identified
+with each notice. Their presence does not imply that every function or every
+architecture variant in Go is linked into each ichnora binary.
+
+SQLite (separate system library)
+--------------------------------
+
+https://www.sqlite.org/copyright.html
+
+The Nix package builds go-sqlite3 with the libsqlite3 tag and links against
+Nix's separately packaged SQLite, rather than compiling the driver's bundled
+SQLite amalgamation. SQLite's core is in the public domain, not under the
+project's Apache license or the driver's MIT license. Its traditional source
+notice, retained here from the driver's bundled sqlite3-binding.c, reads:
+
+The author disclaims copyright to this source code.  In place of
+a legal notice, here is a blessing:
+
+   May you do good and not evil.
+   May you find forgiveness for yourself and forgive others.
+   May you share freely, never taking more than you give.
+
+The bundled amalgamation's version is not a claim about the separately linked
+SQLite version. System-library packaging and any additional components of a
+redistributed Nix closure remain outside the scope of this source bundle.
+
+Provenance and maintenance
+--------------------------
+
+The module license files were copied unchanged from LICENSE in the exact
+module versions listed above, using the local Go module cache. The shared
+Go license and patent files were copied from golang.org/x/sys v0.41.0; the
+other listed module copies carry the same text. Supplemental Go source
+notices and the reflect/deepequal.go attribution were taken from the locally
+installed Go 1.26.7 source tree.
+
+The root LICENSE is the unmodified standard Apache License, Version 2.0 text,
+including its appendix. The local copy used as the text source was LICENSE.txt
+in github.com/aws/aws-sdk-go-v2 v1.41.0. Only that standard license text was
+copied: this does not indicate an AWS SDK dependency or transfer AWS copyrights
+to ichnora. The original-project copyright and license grant are above.
+
+When production dependencies, Go toolchain, build tags, or shipped artifacts
+change, review the actual upstream license files, source notices, and any
+NOTICE/PATENTS files, update this inventory and LICENSES/, and retain the
+resulting bundle with the binary. Do not infer licensing from a package name
+or a single SPDX label, especially for the MCP SDK's mixed-license transition.

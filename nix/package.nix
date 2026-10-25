@@ -27,9 +27,13 @@ buildGoModule {
   # forwards messages to `ichnora hook opencode`.
   postInstall = ''
     install -Dm0644 adapters/opencode/index.js "$out/share/ichnora/opencode/index.js"
+    install -Dm0644 -t "$out/share/doc/ichnora" LICENSE THIRD_PARTY_NOTICES.txt
+    install -Dm0644 -t "$out/share/doc/ichnora/LICENSES" LICENSES/*.txt
   '';
   meta = {
     description = "Local memory with provenance for coding agents";
+    homepage = "https://github.com/timfewi/ichnora";
+    license = lib.licenses.asl20;
     mainProgram = "ichnora";
     platforms = lib.platforms.linux;
   };

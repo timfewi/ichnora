@@ -97,7 +97,8 @@ func newEnv(t *testing.T, mutate func(*config.Config)) *testEnv {
 	data, _ := json.Marshal(e.cfg)
 	writeFile(t, e.cfgPath, string(data))
 	for k, v := range map[string]string{"ICHNORA_SOCKET": e.cfg.AgentSocket, "ICHNORA_ADMIN_SOCKET": e.cfg.AdminSocket,
-		"ICHNORA_CONFIG": e.cfgPath, "CLAUDE_CODE_SESSION_ID": "", "CODEX_THREAD_ID": "", "OPENCODE_SESSION_ID": ""} {
+		"ICHNORA_CONFIG": e.cfgPath, "ICHNORA_HOOK_CONTEXT": "",
+		"CLAUDE_CODE_SESSION_ID": "", "CODEX_THREAD_ID": "", "OPENCODE_SESSION_ID": ""} {
 		t.Setenv(k, v)
 	}
 	wd, _ := os.Getwd()

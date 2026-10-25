@@ -1,20 +1,21 @@
 # Architecture decision
 
-Status: accepted for the initial delivery. Owner-fixed stack; this record
-documents the routine choices made inside it and their reasons.
+This record describes the implemented architecture and the reasons for its
+boundaries. Setup is documented in [Operations](operations.md).
 
 ## Runtime and dependencies
 
-| Component    | Pin                                             | Reason                                                                                                                                                                                                  |
-| ------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go toolchain | 1.26.7 from the flake's nixpkgs pin             | `go.mod` declares `go 1.26.7`; builds set `GOTOOLCHAIN=local`, so no toolchain download happens in builds or at runtime.                                                                                |
-| SQLite       | 3.53.3 from the same nixpkgs pin                | Compiled with `SQLITE_ENABLE_FTS5` and `SQLITE_SECURE_DELETE` (checked with `nix eval` of `sqlite.NIX_CFLAGS_COMPILE`). FTS5 is additionally probed at startup and in tests against the linked library. |
-| Driver       | `github.com/mattn/go-sqlite3` v1.14.52          | `CGO_ENABLED=1`, build tag `libsqlite3`: links the Nix SQLite instead of compiling the bundled amalgamation. No second driver, no fallback.                                                             |
-| MCP          | `github.com/modelcontextprotocol/go-sdk` v1.8.0 | Official SDK; requires Go 1.25, compatible with 1.26.7. Stdio transport for the per-session bridge.                                                                                                     |
+| Component    | Source of truth                                      | Design                                                                                                                                 |
+| ------------ | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Go toolchain | `go.mod` and the flake's nixpkgs pin                 | `GOTOOLCHAIN=local` prevents automatic toolchain downloads during builds.                                                              |
+| SQLite       | The flake's nixpkgs package                          | FTS5 is probed at startup and in tests against the linked library; connections enable secure deletion.                                 |
+| Driver       | `github.com/mattn/go-sqlite3` in `go.mod`            | `CGO_ENABLED=1`, build tag `libsqlite3`: links Nix SQLite instead of compiling the bundled amalgamation. No second driver or fallback. |
+| MCP          | `github.com/modelcontextprotocol/go-sdk` in `go.mod` | Official SDK with stdio transport for the per-session bridge.                                                                          |
 
-Everything else is the standard library: `flag`, `encoding/json`, `net/http`
-over `net.Listen("unix", …)`, `log/slog`, `database/sql`, `embed`. No ORM, web
-framework, graph or vector service, model client or Node.js dependency.
+The core otherwise uses the standard library: `flag`, `encoding/json`,
+`net/http` over `net.Listen("unix", …)`, `log/slog`, `database/sql`, `embed`.
+There is no ORM, web framework, graph/vector service, model client or Node.js
+dependency. Transitive Go dependencies are recorded in `go.mod`.
 
 ## One executable
 
@@ -30,7 +31,7 @@ transport in `internal/server`; external evidence tools in `internal/evidence`.
 The service owns the database. The CLI, hooks and MCP bridges are clients of
 its Unix sockets and never open the database; a missing socket is reported as
 `service_unavailable` with no direct or remote fallback. Persistent lifetime
-belongs to systemd (host capability), not to an agent session.
+belongs to the operator's service manager, not to an agent session.
 
 - One writer goroutine consumes a bounded queue (default 64 operations). A full
   queue returns `busy` immediately; work is never dropped after acknowledgement.
@@ -57,7 +58,7 @@ belongs to systemd (host capability), not to an agent session.
 Three independent permissions come from the host-supplied configuration file
 and the owner's administration commands:
 
-1. **Workspace roots** (for example `~/code`) bound where projects may be enrolled.
+1. **Workspace roots** (for example `/home/alice/code`) bound where projects may be enrolled.
    Enrollment is an explicit allowlist in the database; new projects start
    unenrolled and discovery only reports candidates.
 2. **Session-source roots** per harness bound which transcript files the
@@ -94,11 +95,11 @@ roots, then reads the transcript incrementally from a durable cursor (bounded
 bytes and lines per call). Missed callbacks are reconciled by the next hook or
 an explicit `reconcile`; a clean `SessionEnd` is not required.
 
-| Harness     | Pinned version | Native mechanism                                                                                                                                                                 |
-| ----------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code | 2.1.302        | Command hooks; JSONL transcript referenced by `transcript_path`, subagent transcripts by `agent_transcript_path`.                                                                |
-| Codex       | 0.163.0        | `[hooks]` in `config.toml` (stable `hooks` feature) with Claude-compatible inputs; rollout JSONL via `transcript_path` (nullable).                                               |
-| OpenCode    | 2.0.32         | V2 plugin `session.hook("context" \| "compaction")`, executed by OpenCode's own runtime. The plugin forwards new messages to `ichnora hook opencode`; it contains no core logic. |
+| Harness     | Inspected version | Native mechanism                                                                                                                                                                 |
+| ----------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code | 2.1.302           | Command hooks; JSONL transcript referenced by `transcript_path`, subagent transcripts by `agent_transcript_path`.                                                                |
+| Codex       | 0.163.0           | `[hooks]` in `config.toml` (stable `hooks` feature) with Claude-compatible inputs; rollout JSONL via `transcript_path` (nullable).                                               |
+| OpenCode    | 2.0.32            | V2 plugin `session.hook("context" \| "compaction")`, executed by OpenCode's own runtime. The plugin forwards new messages to `ichnora hook opencode`; it contains no core logic. |
 
 The binary inspection behind this table and the per-boundary coverage matrix
 are in [adapters.md](adapters.md).
@@ -119,10 +120,9 @@ bounded time and output, and outside write transactions. A missing tool yields a
 `missing_adapter` outcome; Ichnora's own SHA-256 file digests still decide
 applicability. AST row IDs are never stored as identities; references keep
 file path, digest, symbol and location. The AST snapshot generation is kept
-only as provenance: `ast-index` increments it on every refresh, even without
-changes (observed 1 → 2 → 3 on a synthetic repository), so validity follows
-the file digest. Tabula references keep card, section id, section fingerprint
-and source path; a renamed or changed section is stale.
+only as provenance: a refresh can increment it without a source change, so
+validity follows the file digest. Tabula references keep card, section id,
+section fingerprint and source path; a renamed or changed section is stale.
 
 ## Host environment boundary
 
@@ -134,6 +134,28 @@ dependency stale; project decisions, tasks and history are untouched, and a
 rollback does not restore an older working context. Without a descriptor,
 environment-dependent claims report unknown applicability. There is no reset
 coordinator, per-activation store or session termination.
+
+## Packaging and host integration
+
+- The flake exports Linux `packages.<system>.ichnora` and the default package
+  (`buildGoModule`, `libsqlite3` tag, Nix SQLite, the OpenCode plugin under
+  `share/ichnora/opencode`), plus a development shell and checks.
+- `nixosModules.default` provides `services.ichnora`: a systemd unit with
+  `PrivateNetwork`, `ProtectHome=read-only`, `AF_UNIX` only, a private runtime
+  directory, state-directory creation and an optional environment-descriptor
+  oneshot. The consumer supplies the user, workspace and transcript roots.
+- The same binary can run directly with a JSON configuration; NixOS is not
+  required at runtime. Building or installing the package does not activate a
+  service, enroll projects or register clients.
+- Harness registration belongs to the consumer. Register the stdio MCP bridge
+  and, separately, opt-in native hooks or the OpenCode plugin. Choose one
+  automatic recall owner: capture-only hooks use `--no-context` or
+  `ICHNORA_HOOK_CONTEXT=off`. Ichnora recall additionally requires project
+  enrollment with `--recall`; competing native memory must be disabled by the
+  operator to avoid duplicate injection.
+- Sandboxes should receive only the agent socket and necessary project paths,
+  not the admin socket or state directory. Harness-specific hook approval
+  remains an explicit operator action; package installation does not grant it.
 
 ## Retention
 
