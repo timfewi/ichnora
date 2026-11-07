@@ -28,6 +28,7 @@ let
       ];
     }).config;
   plain = mkConfig { };
+  pruned = mkConfig { pruneMissingProjects = true; };
   described = mkConfig {
     environmentDescriptor = {
       enable = true;
@@ -62,6 +63,8 @@ if
   && generated.admin_socket == "/run/ichnora/admin.sock"
   && generated.workspace_roots == [ "/home/alice/code" ]
   && generated.tools == { tabula = "/run/current-system/sw/bin/tabula"; }
+  && !(generated ? prune_missing_projects)
+  && pruned.services.ichnora.generatedConfig.prune_missing_projects
   && !(generated ? environment_descriptor)
   && !(plain.systemd.services ? ichnora-environment)
   && described.systemd.services ? ichnora-environment

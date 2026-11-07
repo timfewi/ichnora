@@ -87,6 +87,16 @@ func runService(ctx context.Context, cfg config.Config, log *slog.Logger, ready 
 	}
 	core.Version = version
 	c := core.New(st, cfg, secret, log)
+	cleanup := func() {
+		removed, err := c.PruneMissingProjects(ctx)
+		if err != nil {
+			log.Warn("missing-project cleanup failed", "error_type", fmt.Sprintf("%T", err))
+		}
+		if removed > 0 {
+			log.Info("removed missing projects", "count", removed)
+		}
+	}
+	cleanup()
 	srv := server.New(c, log)
 	errs := make(chan error, 2)
 	for _, l := range []struct {
@@ -109,10 +119,19 @@ func runService(ctx context.Context, cfg config.Config, log *slog.Logger, ready 
 		close(ready)
 	}
 	var result error
-	select {
-	case <-ctx.Done():
-	case err := <-errs:
-		result = err
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break loop
+		case err := <-errs:
+			result = err
+			break loop
+		case <-ticker.C:
+			cleanup()
+		}
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

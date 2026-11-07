@@ -60,6 +60,24 @@ messages directly rather than scanning a native transcript directory. Optional
 [`internal/config/config.go`](../internal/config/config.go); the default resource
 limits and protocol are in [Contract](contract.md).
 
+## Cleanup of removed projects
+
+Optional `prune_missing_projects: true` enables service-owned cleanup at startup
+and once per minute. The NixOS equivalent is
+`services.ichnora.pruneMissingProjects = true`; the default is false.
+
+Cleanup removes enrollment, claims, tasks and captured session projections only
+when every registered project/worktree root is absent beneath an available,
+canonical workspace. Existing roots, filesystem errors and symlink aliases are
+preserved. Roots are checked again inside the deletion transaction. A registered
+worktree that still exists keeps the project's memory. Moving a project without
+updating its root mapping also makes its former path absent.
+
+Deletion uses retention tombstones, so old sessions cannot resurrect removed
+memory. Native transcripts and backups are not deleted; the physical-erasure
+limits of retention still apply. No collection or enrollment is enabled by this
+option, and clients receive no new deletion operation.
+
 ## Optional NixOS module
 
 Add the source flake to your system flake's `inputs`:

@@ -195,6 +195,10 @@ func (c *Core) RetentionPreview(ctx context.Context, caller Caller, req contract
 // RetentionApply deletes the selection, writes tombstones, marks dependent
 // support as lost, recomputes statuses and truncates the WAL.
 func (c *Core) RetentionApply(ctx context.Context, caller Caller, req contract.AdminRequest) (RetentionResult, error) {
+	return c.retentionApply(ctx, caller, req, false)
+}
+
+func (c *Core) retentionApply(ctx context.Context, caller Caller, req contract.AdminRequest, forgetMissing bool) (RetentionResult, error) {
 	if err := c.admin(caller); err != nil {
 		return RetentionResult{}, err
 	}
@@ -210,6 +214,15 @@ func (c *Core) RetentionApply(ctx context.Context, caller Caller, req contract.A
 		}
 		if req.Confirm == "" || req.Confirm != token {
 			return contract.Errf(contract.CodeConflict, "confirmation does not match the current state; preview again")
+		}
+		if forgetMissing {
+			project, err := c.loadProject(ctx, tx, sel.project)
+			if err != nil {
+				return err
+			}
+			if !c.cfg.PruneMissingProjects || !c.missingRoots(project.Roots) {
+				return contract.Errf(contract.CodeConflict, "project roots changed before cleanup; nothing deleted")
+			}
 		}
 		counts, deps, err := c.countSelection(ctx, tx, sel)
 		if err != nil {
@@ -292,6 +305,12 @@ func (c *Core) RetentionApply(ctx context.Context, caller Caller, req contract.A
 		}
 		if _, err := c.recompute(ctx, tx, remaining); err != nil {
 			return err
+		}
+		if forgetMissing {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, sel.project); err != nil {
+				return err
+			}
+			return store.BumpGeneration(ctx, tx)
 		}
 		if sel.owner != "" {
 			return store.BumpProject(ctx, tx, sel.owner)

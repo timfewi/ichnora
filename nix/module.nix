@@ -30,6 +30,7 @@ let
     };
     inherit (cfg) limits;
   }
+  // lib.optionalAttrs cfg.pruneMissingProjects { prune_missing_projects = true; }
   // lib.optionalAttrs cfg.environmentDescriptor.enable { environment_descriptor = descriptorPath; };
   configFile = json.generate "ichnora-config.json" settings;
   facts = json.generate "ichnora-environment-facts.json" {
@@ -105,6 +106,8 @@ in
         boundaries, not a corpus: nothing is read until a project is enrolled.
       '';
     };
+
+    pruneMissingProjects = lib.mkEnableOption "delete memory and enrollment when all project roots are missing beneath an available workspace";
 
     sessionSources = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf absolute);

@@ -36,11 +36,12 @@ type Limits struct {
 
 // Config is the service configuration.
 type Config struct {
-	StateDir       string              `json:"state_dir,omitempty"`
-	AgentSocket    string              `json:"agent_socket,omitempty"`
-	AdminSocket    string              `json:"admin_socket,omitempty"`
-	WorkspaceRoots []string            `json:"workspace_roots"`
-	SessionSources map[string][]string `json:"session_sources"`
+	PruneMissingProjects bool                `json:"prune_missing_projects,omitempty"`
+	StateDir             string              `json:"state_dir,omitempty"`
+	AgentSocket          string              `json:"agent_socket,omitempty"`
+	AdminSocket          string              `json:"admin_socket,omitempty"`
+	WorkspaceRoots       []string            `json:"workspace_roots"`
+	SessionSources       map[string][]string `json:"session_sources"`
 	// EnvironmentDescriptor is an optional host-generated JSON file.
 	EnvironmentDescriptor string `json:"environment_descriptor,omitempty"`
 	Tools                 Tools  `json:"tools"`
