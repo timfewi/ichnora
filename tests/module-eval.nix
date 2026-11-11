@@ -15,6 +15,7 @@ let
         self.nixosModules.default
         {
           system.stateVersion = "26.05";
+          users.users.alice.isNormalUser = true;
           services.ichnora = {
             enable = true;
             user = "alice";
@@ -37,9 +38,35 @@ let
   };
   disabled = mkConfig { enable = false; };
   custom = mkConfig {
-    agentSocket = "/run/custom-memory/reader.sock";
-    adminSocket = "/run/custom-memory/owner.sock";
+    agentSocket = "/run/custom-memory/agent/reader.sock";
+    adminSocket = "/run/custom-memory/admin/owner.sock";
   };
+  stateSockets = mkConfig {
+    agentSocket = "/home/alice/.local/state/ichnora/run/reader.sock";
+    adminSocket = "/home/alice/.local/state/ichnora/run/owner.sock";
+  };
+  runtimeStateSockets = mkConfig {
+    stateDir = "/run/private-state";
+    agentSocket = "/run/private-state/sockets/reader.sock";
+    adminSocket = "/run/private-state/sockets/owner.sock";
+  };
+  systemState = mkConfig { stateDir = "/var/lib/ichnora"; };
+  invalidSockets = [
+    (mkConfig { agentSocket = "/run/reader.sock"; })
+    (mkConfig { adminSocket = "/run/ichnora/agent.sock"; })
+    (mkConfig { agentSocket = "/run/ichnora/../shared/reader.sock"; })
+    (mkConfig { agentSocket = "/home/alice/reader.sock"; })
+    (mkConfig {
+      stateDir = "/run/custom-memory/state";
+      agentSocket = "/run/custom-memory/reader.sock";
+      adminSocket = "/run/custom-memory/owner.sock";
+    })
+  ];
+  assertionsHold =
+    host:
+    lib.all (
+      entry: entry.assertion || !(lib.hasPrefix "services.ichnora" entry.message)
+    ) host.assertions;
   clientSocketsMatch =
     host:
     host.environment.variables.ICHNORA_SOCKET or null
@@ -58,6 +85,27 @@ if
   && service.serviceConfig.PrivateNetwork
   && service.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ]
   && service.serviceConfig.ReadWritePaths == [ "/home/alice/.local/state/ichnora" ]
+  && service.serviceConfig.RuntimeDirectory == [ "ichnora" ]
+  && lib.elem "ichnora-state.service" service.requires
+  && lib.elem "ichnora-state.service" service.after
+  && plain.systemd.services.ichnora-state.serviceConfig.User == "alice"
+  && plain.systemd.services.ichnora-state.serviceConfig.ReadWritePaths == [ "/home/alice" ]
+  && !(systemState.systemd.services ? ichnora-state)
+  && lib.elem "systemd-tmpfiles-setup.service" systemState.systemd.services.ichnora.after
+  && lib.elem "d /var/lib/ichnora 0700 alice - - -" systemState.systemd.tmpfiles.rules
+  && !(lib.any (rule: lib.hasInfix "/home/alice/.local" rule) plain.systemd.tmpfiles.rules)
+  &&
+    custom.systemd.services.ichnora.serviceConfig.RuntimeDirectory == [
+      "custom-memory/agent"
+      "custom-memory/admin"
+    ]
+  && stateSockets.systemd.services.ichnora.serviceConfig.RuntimeDirectory == [ ]
+  && runtimeStateSockets.systemd.services.ichnora.serviceConfig.RuntimeDirectory == [ ]
+  && assertionsHold plain
+  && assertionsHold custom
+  && assertionsHold stateSockets
+  && assertionsHold runtimeStateSockets
+  && lib.all (host: !(assertionsHold host)) invalidSockets
   && lib.hasInfix "\"serve\" \"--config\"" exec
   && generated.agent_socket == "/run/ichnora/agent.sock"
   && generated.admin_socket == "/run/ichnora/admin.sock"

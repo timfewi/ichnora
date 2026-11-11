@@ -1,0 +1,36 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c # v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            system-features = nixos-test benchmark big-parallel kvm
+      - name: Check formatting, static analysis and synthetic Go scenarios
+        run: nix develop . --command just check
+      - name: Build the pinned package and evaluate the NixOS module
+        run: nix build --no-link --no-write-lock-file .#checks.x86_64-linux.package .#checks.x86_64-linux.module-eval
+      - name: Enable the VM test on the isolated hosted runner
+        run: sudo chmod a+rw /dev/kvm
+      - name: Start the NixOS service and verify custom sockets and restart
+        run: nix build --no-link --no-write-lock-file -L .#checks.x86_64-linux.module-vm
