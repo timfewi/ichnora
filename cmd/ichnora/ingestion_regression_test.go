@@ -326,7 +326,10 @@ func TestOpenCodeBatchTransportInEmbeddedRuntime(t *testing.T) {
 			writeScript(t, bin, "#!/bin/sh\nexec "+self+" -test.run '^TestOpenCodeFakeHook$'\n")
 			plugin, _ := filepath.Abs(filepath.Join(testdataAbs, "..", "..", "..", "adapters", "opencode", "index.js"))
 			cmd := exec.Command(runtime, filepath.Join(testdataAbs, "opencode-batch-harness.mjs"))
+			// The race runtime's default one-second exit delay is not part of
+			// the hook protocol and would consume the plugin's callback budget.
 			cmd.Env = append(os.Environ(), "BUN_BE_BUN=1", "ICHNORA_BIN="+bin, "PLUGIN_PATH="+plugin, "SESSION_DIR="+dir, "SCENARIO="+scenarioPath,
+				"GORACE="+strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"),
 				"ICHNORA_FAKE_HOOK=1", "ICHNORA_FAKE_LOG="+logPath, "ICHNORA_FAKE_FIRST="+strings.TrimSuffix(name, "-compacted"), "ICHNORA_TEST_MAIN=")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("plugin runtime: %v %s", err, out)
