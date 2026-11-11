@@ -15,6 +15,7 @@ let
         self.nixosModules.default
         {
           system.stateVersion = "26.05";
+          users.users.alice.isNormalUser = true;
           services.ichnora = {
             enable = true;
             user = "alice";
@@ -49,6 +50,7 @@ let
     agentSocket = "/run/private-state/sockets/reader.sock";
     adminSocket = "/run/private-state/sockets/owner.sock";
   };
+  systemState = mkConfig { stateDir = "/var/lib/ichnora"; };
   invalidSockets = [
     (mkConfig { agentSocket = "/run/reader.sock"; })
     (mkConfig { adminSocket = "/run/ichnora/agent.sock"; })
@@ -84,6 +86,14 @@ if
   && service.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ]
   && service.serviceConfig.ReadWritePaths == [ "/home/alice/.local/state/ichnora" ]
   && service.serviceConfig.RuntimeDirectory == [ "ichnora" ]
+  && lib.elem "ichnora-state.service" service.requires
+  && lib.elem "ichnora-state.service" service.after
+  && plain.systemd.services.ichnora-state.serviceConfig.User == "alice"
+  && plain.systemd.services.ichnora-state.serviceConfig.ReadWritePaths == [ "/home/alice" ]
+  && !(systemState.systemd.services ? ichnora-state)
+  && lib.elem "systemd-tmpfiles-setup.service" systemState.systemd.services.ichnora.after
+  && lib.elem "d /var/lib/ichnora 0700 alice - - -" systemState.systemd.tmpfiles.rules
+  && !(lib.any (rule: lib.hasInfix "/home/alice/.local" rule) plain.systemd.tmpfiles.rules)
   &&
     custom.systemd.services.ichnora.serviceConfig.RuntimeDirectory == [
       "custom-memory/agent"

@@ -58,6 +58,8 @@ let
     parent: lib.hasPrefix "/run/" parent && !(within cfg.stateDir parent)
   ) socketParents;
   runtimeDirectories = map (lib.removePrefix "/run/") runtimeSocketParents;
+  operatorHome = config.users.users.${cfg.user}.home or null;
+  stateInHome = operatorHome != null && within operatorHome cfg.stateDir;
 in
 {
   options.services.ichnora = {
@@ -246,7 +248,9 @@ in
     };
 
     systemd = {
-      tmpfiles.rules = [
+      # Root tmpfiles cannot safely create implicit parents below a user-owned
+      # home. Prepare those as the operator, before the main mount namespace.
+      tmpfiles.rules = lib.optionals (!stateInHome) [
         "d ${cfg.stateDir} 0700 ${cfg.user} ${if cfg.group == null then "-" else cfg.group} - -"
       ];
 
@@ -254,7 +258,12 @@ in
         ichnora = {
           description = "Ichnora memory service";
           wantedBy = [ "multi-user.target" ];
-          after = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
+          after = [
+            "systemd-tmpfiles-setup.service"
+          ]
+          ++ lib.optional stateInHome "ichnora-state.service"
+          ++ lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
+          requires = lib.optional stateInHome "ichnora-state.service";
           wants = lib.optional cfg.environmentDescriptor.enable "ichnora-environment.service";
           serviceConfig = owner // {
             Type = "simple";
@@ -281,6 +290,30 @@ in
             LockPersonality = true;
             ReadWritePaths = [ cfg.stateDir ];
             ReadOnlyPaths = cfg.readOnlyPaths;
+          };
+        };
+
+        ichnora-state = lib.mkIf stateInHome {
+          description = "Prepare the Ichnora state directory as its owner";
+          before = [ "ichnora.service" ];
+          partOf = [ "ichnora.service" ];
+          serviceConfig = owner // {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = utils.escapeSystemdExecArgs [
+              "${pkgs.coreutils}/bin/install"
+              "-d"
+              "-m0700"
+              "--"
+              cfg.stateDir
+            ];
+            UMask = "0077";
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            PrivateNetwork = true;
+            ProtectSystem = "strict";
+            ReadWritePaths = [ operatorHome ];
+            RestrictAddressFamilies = [ "AF_UNIX" ];
           };
         };
 

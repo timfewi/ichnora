@@ -33,6 +33,10 @@ pkgs.testers.runNixOSTest {
         script = "cd /home/alice/code/example && " + command
         return machine.succeed("su - alice -c " + shlex.quote(script))
 
+    machine.wait_until_succeeds("test -S /run/custom-memory/agent/reader.sock && test -S /run/custom-memory/admin/owner.sock")
+    assert machine.succeed("stat -c '%U:%a' /home/alice/.local/state/ichnora").strip() == "alice:700"
+    assert machine.succeed("stat -c '%U' /home/alice/.local").strip() == "alice"
+    assert machine.succeed("stat -c '%U' /home/alice/.local/state").strip() == "alice"
     for directory in ["/run/custom-memory/agent", "/run/custom-memory/admin"]:
         assert machine.succeed("stat -c '%U:%a' " + directory).strip() == "alice:700"
     for socket in ["/run/custom-memory/agent/reader.sock", "/run/custom-memory/admin/owner.sock"]:
@@ -60,6 +64,11 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("ichnora.service")
     machine.wait_until_succeeds("test -S /run/custom-memory/agent/reader.sock")
     assert_memory()
+    machine.succeed("systemctl stop ichnora.service")
+    machine.succeed("mv /home/alice/.local/state/ichnora /home/alice/.local/state/ichnora.saved")
+    machine.succeed("systemctl start ichnora.service")
+    machine.wait_until_succeeds("test -S /run/custom-memory/agent/reader.sock && test -S /run/custom-memory/admin/owner.sock")
+    assert machine.succeed("stat -c '%U:%a' /home/alice/.local/state/ichnora").strip() == "alice:700"
 
     restricted = client("ICHNORA_ADMIN_SOCKET=$ICHNORA_SOCKET ichnora projects || test $? -eq 4")
     assert json.loads(restricted)["error"]["code"] == "forbidden", restricted
