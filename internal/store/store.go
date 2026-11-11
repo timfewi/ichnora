@@ -266,22 +266,69 @@ func (s *Store) Read() *sql.DB { return s.reader }
 
 // Checkpoint truncates the WAL after deletions; it waits for the writer connection.
 func (s *Store) Checkpoint(ctx context.Context) error {
-	_, err := s.writer.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
-	return err
+	return checkpoint(ctx, s.writer)
+}
+
+func checkpoint(ctx context.Context, db *sql.DB) error {
+	var busy, pages, done int
+	if err := db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &pages, &done); err != nil {
+		return err
+	}
+	if busy != 0 || pages != done {
+		return ErrBusy
+	}
+	return nil
+}
+
+// CheckpointFile recovers and flushes an existing database before offline
+// replacement. The caller must hold the service's state lock.
+func CheckpointFile(ctx context.Context, path string) error {
+	db, err := sql.Open(driverName, "file:"+path+"?mode=rw&_synchronous=FULL")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return checkpoint(ctx, db)
+}
+
+// Snapshot copies an existing database, including committed WAL records, to
+// a new private, self-contained file. The caller owns any offline state lock.
+func Snapshot(ctx context.Context, path, out string) (int64, error) {
+	db, err := sql.Open(driverName, "file:"+path+"?mode=ro")
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	return snapshot(ctx, db, out)
 }
 
 // Backup writes a consistent snapshot to a new private file.
 func (s *Store) Backup(ctx context.Context, out string) (int64, error) {
+	return snapshot(ctx, s.reader, out)
+}
+
+func snapshot(ctx context.Context, db *sql.DB, out string) (int64, error) {
 	f, err := os.OpenFile(out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return 0, err
 	}
-	f.Close()
-	if _, err := s.reader.ExecContext(ctx, `VACUUM INTO ?`, out); err != nil {
+	if err := f.Close(); err != nil {
 		os.Remove(out)
 		return 0, err
 	}
-	st, err := os.Stat(out)
+	if _, err := db.ExecContext(ctx, `VACUUM INTO ?`, out); err != nil {
+		os.Remove(out)
+		return 0, err
+	}
+	f, err = os.Open(out)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	if err := f.Sync(); err != nil {
+		return 0, err
+	}
+	st, err := f.Stat()
 	if err != nil {
 		return 0, err
 	}
@@ -368,6 +415,12 @@ func IsBusy(err error) bool {
 func IsFull(err error) bool {
 	var se sqlite3.Error
 	return errors.As(err, &se) && se.Code == sqlite3.ErrFull
+}
+
+// IsCorrupt reports database content that cannot be recovered by SQLite.
+func IsCorrupt(err error) bool {
+	var se sqlite3.Error
+	return errors.As(err, &se) && (se.Code == sqlite3.ErrCorrupt || se.Code == sqlite3.ErrNotADB)
 }
 
 // Verify checks a database file offline: integrity, a known schema version

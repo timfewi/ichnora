@@ -76,6 +76,9 @@ func runService(ctx context.Context, cfg config.Config, log *slog.Logger, ready 
 		return err
 	}
 	defer lock.Close()
+	if err := checkRestoreState(cfg.StateDir); err != nil {
+		return err
+	}
 	st, err := store.Open(ctx, filepath.Join(cfg.StateDir, dbName), store.Options{Readers: cfg.Limits.Readers, QueueDepth: cfg.Limits.QueueDepth})
 	if err != nil {
 		return fmt.Errorf("database unavailable: %w", err)
@@ -137,78 +140,4 @@ loop:
 	defer cancel()
 	srv.Shutdown(shutdown)
 	return result
-}
-
-// restore replaces the database with a verified backup while the service is
-// stopped. The previous database is kept beside it, never deleted.
-func restore(configPath, backup string, stdout, stderr io.Writer) int {
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "ichnora restore:", err)
-		return 2
-	}
-	lock, err := prepareState(cfg)
-	if err != nil {
-		fmt.Fprintln(stderr, "ichnora restore:", err)
-		return 1
-	}
-	defer lock.Close()
-	ctx := context.Background()
-	version, err := store.Verify(ctx, backup)
-	if err != nil {
-		fmt.Fprintln(stderr, "ichnora restore: backup rejected:", err)
-		return 1
-	}
-	target := filepath.Join(cfg.StateDir, dbName)
-	staged := target + ".restore"
-	if err := copyFile(backup, staged); err != nil {
-		fmt.Fprintln(stderr, "ichnora restore:", err)
-		return 1
-	}
-	if _, err := os.Stat(target); err == nil {
-		previous := target + ".previous-" + time.Now().UTC().Format("20060102T150405Z")
-		if err := os.Rename(target, previous); err != nil {
-			fmt.Fprintln(stderr, "ichnora restore:", err)
-			return 1
-		}
-		fmt.Fprintln(stdout, "previous database kept at", previous)
-	}
-	for _, suffix := range []string{"-wal", "-shm"} {
-		os.Remove(target + suffix)
-	}
-	if err := os.Rename(staged, target); err != nil {
-		fmt.Fprintln(stderr, "ichnora restore:", err)
-		return 1
-	}
-	// Opening applies pending migrations to an older backup.
-	st, err := store.Open(ctx, target, store.Options{})
-	if err != nil {
-		fmt.Fprintln(stderr, "ichnora restore: restored database cannot be opened:", err)
-		return 1
-	}
-	st.Close()
-	fmt.Fprintln(stdout, "restored schema version", version)
-	return 0
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(dst)
-		return err
-	}
-	if err := out.Sync(); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
 }
