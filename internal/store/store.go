@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -23,6 +24,11 @@ import (
 var migrations embed.FS
 
 const driverName = "ichnora_sqlite3"
+
+// fileURI keeps path characters separate from SQLite connection options.
+func fileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: path, OmitHost: true}).String()
+}
 
 // Pragmas applied to every connection, reader or writer.
 const connectionPragmas = `PRAGMA foreign_keys = ON;
@@ -86,7 +92,7 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		return nil, err
 	}
 	f.Close()
-	writer, err := sql.Open(driverName, "file:"+path+"?_journal_mode=WAL&_synchronous=FULL&_txlock=immediate")
+	writer, err := sql.Open(driverName, fileURI(path)+"?_journal_mode=WAL&_synchronous=FULL&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +107,7 @@ func Open(ctx context.Context, path string, opts Options) (*Store, error) {
 		writer.Close()
 		return nil, err
 	}
-	reader, err := sql.Open(driverName, "file:"+path+"?mode=ro")
+	reader, err := sql.Open(driverName, fileURI(path)+"?mode=ro")
 	if err != nil {
 		writer.Close()
 		return nil, err
@@ -283,7 +289,7 @@ func checkpoint(ctx context.Context, db *sql.DB) error {
 // CheckpointFile recovers and flushes an existing database before offline
 // replacement. The caller must hold the service's state lock.
 func CheckpointFile(ctx context.Context, path string) error {
-	db, err := sql.Open(driverName, "file:"+path+"?mode=rw&_synchronous=FULL")
+	db, err := sql.Open(driverName, fileURI(path)+"?mode=rw&_synchronous=FULL")
 	if err != nil {
 		return err
 	}
@@ -294,7 +300,7 @@ func CheckpointFile(ctx context.Context, path string) error {
 // Snapshot copies an existing database, including committed WAL records, to
 // a new private, self-contained file. The caller owns any offline state lock.
 func Snapshot(ctx context.Context, path, out string) (int64, error) {
-	db, err := sql.Open(driverName, "file:"+path+"?mode=ro")
+	db, err := sql.Open(driverName, fileURI(path)+"?mode=ro")
 	if err != nil {
 		return 0, err
 	}
@@ -426,7 +432,7 @@ func IsCorrupt(err error) bool {
 // Verify checks a database file offline: integrity, a known schema version
 // and FTS5 support. It opens the file read-only.
 func Verify(ctx context.Context, path string) (int, error) {
-	db, err := sql.Open(driverName, "file:"+path+"?mode=ro")
+	db, err := sql.Open(driverName, fileURI(path)+"?mode=ro")
 	if err != nil {
 		return 0, err
 	}
