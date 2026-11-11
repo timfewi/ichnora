@@ -111,6 +111,26 @@ an explicit `reconcile`; a clean `SessionEnd` is not required.
 The binary inspection behind this table and the per-boundary coverage matrix
 are in [adapters.md](adapters.md).
 
+## Retrieval stages
+
+Search separates database traversal (`core/search_query.go`), evidence and
+applicability evaluation, pure scoring (`core/search_rank.go`), and response
+pagination/budget encoding. SQL applies scope and structured filters before
+keyset traversal in batches of 500. Every eligible batch participates in ranking;
+the fetch size cannot hide older decisions or conflicts. A read snapshot keeps
+the enrollment, traversed records and cursor generation consistent. Cursors also
+bind the ordered visible record identities, so a file edit, environment change
+or expiry cannot silently shift an offset between pages. Dependency evaluation
+uses request-local caches, and independent support traversal shares a
+request-local memo rather than reloading shared chains for every ranked claim.
+Scoring uses one request timestamp so evaluation duration cannot reorder pages.
+
+Retrieval has an explicit 10,000-match examination bound. A broader request is
+rejected with advice to narrow its filters, rather than reporting a partial
+candidate set as complete. Output remains separately bounded by page size and
+serialized UTF-8 bytes. Task resume examines all linked claims under the same
+explicit bound and sorts ties by stable record identity.
+
 ## Model boundary
 
 The core performs no model calls. Ingestion stores bounded, permitted fields;

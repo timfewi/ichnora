@@ -426,32 +426,39 @@ func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget i
 	for _, d := range cp.Decisions {
 		ids[d] = true
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id FROM claims WHERE task_id = ? AND project_id = ? LIMIT 200`, t.ID, s.ProjectID)
-	if err != nil {
+	// Traverse every linked claim in bounded database batches. The same explicit
+	// examination limit as search prevents unbounded task contexts.
+	linked := map[string]claimRow{}
+	if err := walkClaims(ctx, db, s, contract.SearchRequest{TaskID: t.ID}, "", "", "", func(cl claimRow) error {
+		ids[cl.ID] = true
+		linked[cl.ID] = cl
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		ids[id] = true
-	}
-	rows.Close()
 	type decided struct {
 		group string
 		line  contract.Line
 		at    string
 	}
 	var claims []decided
+	orderedIDs := make([]string, 0, len(ids))
 	for id := range ids {
-		if _, ok, err := inScopeClaim(ctx, db, s, id); err != nil || !ok {
-			continue
-		}
-		cl, err := scanClaim(db.QueryRowContext(ctx, `SELECT `+claimColumns+` FROM claims c WHERE c.id = ?`, id))
-		if err != nil {
-			return nil, err
+		orderedIDs = append(orderedIDs, id)
+	}
+	sort.Strings(orderedIDs)
+	for _, id := range orderedIDs {
+		cl, ok := linked[id]
+		if !ok {
+			if _, ok, err := inScopeClaim(ctx, db, s, id); err != nil {
+				return nil, err
+			} else if !ok {
+				continue
+			}
+			cl, err = scanClaim(db.QueryRowContext(ctx, `SELECT `+claimColumns+` FROM claims c WHERE c.id = ?`, id))
+			if err != nil {
+				return nil, err
+			}
 		}
 		refs, err := loadRefs(ctx, db, id)
 		if err != nil {
@@ -485,7 +492,10 @@ func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget i
 		if groupOrder[claims[i].group] != groupOrder[claims[j].group] {
 			return groupOrder[claims[i].group] < groupOrder[claims[j].group]
 		}
-		return claims[i].at > claims[j].at
+		if claims[i].at != claims[j].at {
+			return claims[i].at > claims[j].at
+		}
+		return claims[i].line.Ref < claims[j].line.Ref
 	})
 	emitClaims := func(group string) {
 		for _, d := range claims {
