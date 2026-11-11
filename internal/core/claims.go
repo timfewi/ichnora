@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -208,14 +209,122 @@ func inScopeClaim(ctx context.Context, q querier, s Scope, id string) (owner str
 
 var errRef = contract.Errf(contract.CodeOutOfScope, "a referenced record does not exist in the caller's scope")
 
+// A captured OpenCode turn snapshots its constituent source identities. Keep
+// that internal projection bounded independently of the turn's text budget.
+const (
+	maxTurnSupportRoots  = 200
+	maxTurnSupportEvents = 1000
+)
+
+var errTurnSupportLimit = contract.Errf(contract.CodeInvalid, "turn support exceeds the source limit; reference individual events instead")
+
+func eventSupportRoot(ctx context.Context, q querier, session, id string, flags ingest.Flags) (string, error) {
+	if flags.MessageKey != "" {
+		// Adapter 1 stored the native part identity directly, except that a
+		// top-level text message had no #0 suffix. Preserve an existing event
+		// root so upgraded versions agree with already captured references.
+		legacyNative := strings.TrimSuffix(flags.MessageKey, "#0")
+		var legacyID string
+		err := q.QueryRowContext(ctx, `SELECT id FROM events WHERE session_id = ? AND native_id = ?
+			AND adapter_version = 'opencode-adapter/1' AND id_basis = 'native'`, session, legacyNative).Scan(&legacyID)
+		if err == nil {
+			return "event:" + legacyID, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		return "message:" + ingest.Digest([]byte(session+"\x00"+flags.MessageKey)), nil
+	}
+	return "event:" + id, nil
+}
+
+// turnSupportRoots returns the stable identities present when a turn is
+// referenced. Later appended text must not add corroboration to an old claim.
+// cutoff reconstructs a legacy reference at its enclosing claim's creation.
+func turnSupportRoots(ctx context.Context, q querier, session, turn, cutoff string) ([]string, bool, error) {
+	var upgraded bool
+	if err := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM events WHERE session_id = ?
+		AND coalesce(json_extract(flags, '$.message_key'), '') != '')`, session).Scan(&upgraded); err != nil || !upgraded {
+		return nil, false, err
+	}
+	query := `SELECT id, native_id, adapter_version, id_basis, flags, invalid FROM events WHERE session_id = ? AND turn_id = ?`
+	args := []any{session, turn}
+	if cutoff != "" {
+		query += ` AND ingested_at <= ?`
+		args = append(args, cutoff)
+	}
+	rows, err := q.QueryContext(ctx, query+` LIMIT ?`, append(args, maxTurnSupportEvents+1)...)
+	if err != nil {
+		return nil, false, err
+	}
+	type source struct{ id, native, adapter, basis, flags, invalid string }
+	var sources []source
+	for rows.Next() {
+		if len(sources) == maxTurnSupportEvents {
+			rows.Close()
+			return nil, false, errTurnSupportLimit
+		}
+		var source source
+		if err := rows.Scan(&source.id, &source.native, &source.adapter, &source.basis, &source.flags, &source.invalid); err != nil {
+			rows.Close()
+			return nil, false, err
+		}
+		sources = append(sources, source)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, false, err
+	}
+	rows.Close()
+	set := map[string]bool{}
+	versioned := false
+	for _, source := range sources {
+		var flags ingest.Flags
+		if err := json.Unmarshal([]byte(source.flags), &flags); err != nil {
+			return nil, false, err
+		}
+		linked := flags.MessageKey != ""
+		if !linked && source.adapter == "opencode-adapter/1" && source.basis == "native" {
+			if err := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM events WHERE session_id = ?
+				AND coalesce(json_extract(flags, '$.message_key'), '') != ''
+				AND json_extract(flags, '$.message_key') IN (?, ?))`, session, source.native, source.native+"#0").Scan(&linked); err != nil {
+				return nil, false, err
+			}
+		}
+		versioned = versioned || linked
+		if source.invalid != "" || flags.Derived {
+			continue
+		}
+		root, err := eventSupportRoot(ctx, q, session, source.id, flags)
+		if err != nil {
+			return nil, false, err
+		}
+		if len(set) <= maxTurnSupportRoots {
+			set[root] = true
+		}
+	}
+	if !versioned {
+		return nil, false, nil
+	}
+	if len(set) > maxTurnSupportRoots {
+		return nil, true, errTurnSupportLimit
+	}
+	roots := make([]string, 0, len(set))
+	for root := range set {
+		roots = append(roots, root)
+	}
+	sort.Strings(roots)
+	return roots, true, nil
+}
+
 // bindRef checks a source reference inside the transaction and derives its
 // independence root and state.
 func bindRef(ctx context.Context, tx *sql.Tx, s Scope, pr *preparedRef) error {
 	var project sql.NullString
-	var flags, invalid string
+	var flags, invalid, session, harness string
 	switch pr.kind {
 	case "event":
-		if err := tx.QueryRowContext(ctx, `SELECT project_id, flags, invalid FROM events WHERE id = ?`, pr.ref).Scan(&project, &flags, &invalid); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT project_id, session_id, flags, invalid FROM events WHERE id = ?`, pr.ref).Scan(&project, &session, &flags, &invalid); err != nil {
 			return errRef
 		}
 		var f ingest.Flags
@@ -223,9 +332,13 @@ func bindRef(ctx context.Context, tx *sql.Tx, s Scope, pr *preparedRef) error {
 		if f.Derived {
 			pr.state, pr.lost = "lost", "derived or injected context cannot corroborate"
 		}
-		pr.root = "event:" + pr.ref
+		var err error
+		if pr.root, err = eventSupportRoot(ctx, tx, session, pr.ref, f); err != nil {
+			return err
+		}
 	case "turn":
-		if err := tx.QueryRowContext(ctx, `SELECT project_id, invalid FROM turns WHERE id = ?`, pr.ref).Scan(&project, &invalid); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT t.project_id, t.invalid, t.session_id, s.harness FROM turns t
+			JOIN sessions s ON s.id = t.session_id WHERE t.id = ?`, pr.ref).Scan(&project, &invalid, &session, &harness); err != nil {
 			return errRef
 		}
 		pr.root = "turn:" + pr.ref
@@ -240,6 +353,13 @@ func bindRef(ctx context.Context, tx *sql.Tx, s Scope, pr *preparedRef) error {
 		} else if !ok {
 			return errRef
 		}
+		var status string
+		if err := tx.QueryRowContext(ctx, `SELECT status FROM claims WHERE id = ?`, pr.ref).Scan(&status); err != nil {
+			return err
+		}
+		if !active(status) {
+			pr.state, pr.lost = "lost", "source claim is "+status
+		}
 		return nil
 	default:
 		return nil
@@ -249,6 +369,22 @@ func bindRef(ctx context.Context, tx *sql.Tx, s Scope, pr *preparedRef) error {
 	}
 	if invalid != "" {
 		pr.state, pr.lost = "lost", "source invalidated: "+invalid
+	}
+	if pr.kind == "turn" && harness == "opencode" && pr.state == "ok" {
+		roots, stable, err := turnSupportRoots(ctx, tx, session, pr.ref, "")
+		if err != nil {
+			return err
+		}
+		if stable {
+			switch {
+			case len(roots) == 0:
+				pr.state, pr.lost, pr.root = "lost", "turn has no independent source support", ""
+			default:
+				// Legacy roots are plain strings. A JSON array snapshots the
+				// stable constituent roots of a versioned OpenCode turn.
+				pr.root = mustJSON(roots)
+			}
+		}
 	}
 	return nil
 }
@@ -373,17 +509,28 @@ func (c *Core) hintedSession(ctx context.Context, q querier, s Scope, hint *cont
 }
 
 // supportRoots returns the independent support roots of a claim. Summaries
-// inherit their sources' roots, so repetition never adds corroboration.
+// inherit their active sources' roots, so repetition never adds corroboration.
+// A top-level claim is still evaluated for history and status recomputation;
+// inactive claims never supply support to another claim.
 func supportRoots(ctx context.Context, q querier, id string, depth int, memo map[string][]string) ([]string, error) {
-	if r, ok := memo[id]; ok {
-		return r, nil
-	}
 	if depth > 8 {
 		return nil, nil
 	}
-	var kind, status string
-	if err := q.QueryRowContext(ctx, `SELECT kind, status FROM claims WHERE id = ?`, id).Scan(&kind, &status); err != nil {
+	var kind, status, created string
+	if err := q.QueryRowContext(ctx, `SELECT kind, status, created_at FROM claims WHERE id = ?`, id).Scan(&kind, &status, &created); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if depth > 0 && !active(status) {
 		return nil, nil
+	}
+	// Results depend on the remaining traversal depth. A request may reuse
+	// this memo across top-level claims as well as their shared ancestors.
+	key := id + ":" + strconv.Itoa(depth)
+	if r, ok := memo[key]; ok {
+		return r, nil
 	}
 	rows, err := q.QueryContext(ctx, `SELECT kind, ref, root, state FROM refs WHERE claim_id = ? AND role = 'support'`, id)
 	if err != nil {
@@ -398,6 +545,10 @@ func supportRoots(ctx context.Context, q querier, id string, depth int, memo map
 			return nil, err
 		}
 		refs = append(refs, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
 	}
 	rows.Close()
 	set := map[string]bool{}
@@ -420,7 +571,49 @@ func supportRoots(ctx context.Context, q querier, id string, depth int, memo map
 			continue
 		}
 		if r.root != "" {
-			set[r.root] = true
+			if r.kind == "turn" && strings.HasPrefix(r.root, "[") {
+				if len(r.root) > maxTurnSupportRoots*128 {
+					return nil, errors.New("stored turn support roots exceed the limit")
+				}
+				var roots []string
+				if err := json.Unmarshal([]byte(r.root), &roots); err != nil {
+					return nil, err
+				}
+				if len(roots) > maxTurnSupportRoots {
+					return nil, errors.New("stored turn support roots exceed the limit")
+				}
+				for _, root := range roots {
+					if len(root) > 128 || !(strings.HasPrefix(root, "message:") || strings.HasPrefix(root, "event:")) {
+						return nil, errors.New("invalid stored turn support root")
+					}
+					set[root] = true
+				}
+			} else if r.kind == "turn" && strings.HasPrefix(r.root, "turn:") {
+				var session, harness string
+				err := q.QueryRowContext(ctx, `SELECT t.session_id, s.harness FROM turns t JOIN sessions s ON s.id = t.session_id
+					WHERE t.id = ?`, r.ref).Scan(&session, &harness)
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+				if harness == "opencode" {
+					roots, stable, err := turnSupportRoots(ctx, q, session, r.ref, created)
+					if err != nil {
+						return nil, err
+					}
+					if stable {
+						for _, root := range roots {
+							set[root] = true
+						}
+						continue
+					}
+				}
+				set[r.root] = true
+			} else {
+				set[r.root] = true
+			}
 		}
 	}
 	out := make([]string, 0, len(set))
@@ -428,7 +621,7 @@ func supportRoots(ctx context.Context, q querier, id string, depth int, memo map
 		out = append(out, s)
 	}
 	sort.Strings(out)
-	memo[id] = out
+	memo[key] = out
 	return out, nil
 }
 

@@ -275,6 +275,11 @@ Backups, previous databases and interrupted staging directories retain
 subsequently deleted data; handle those copies separately. Secure deletion does
 not guarantee erasure from snapshots, copy-on-write filesystems or physical media.
 
+Schema 2 records versioned message support identities. Once opened by this
+version, the database is refused by schema-1 binaries; rolling back the binary
+requires a compatible backup from before migration. Legacy source references
+remain readable by this version.
+
 ## Development and optional integration checks
 
 Run the [development gates](../README.md#development) in the development shell.

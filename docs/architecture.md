@@ -43,6 +43,13 @@ belongs to the operator's service manager, not to an agent session.
 - Numbered SQL migrations are embedded with `go:embed` and applied in one
   transaction each whenever the database is opened. A database newer than the
   binary is refused.
+  Schema 2 fences the versioned support-root format: legacy roots are plain
+  strings; new OpenCode turn references snapshot a sorted JSON array of at most
+  200 source roots. Message-part roots are hashed with their session identity,
+  so streaming versions and overlapping event/turn references cannot add
+  corroboration. Derived and invalidated events are omitted. Capturing a turn
+  that exceeds 200 roots or 1000 inspected events returns `invalid_request`
+  and advises referencing individual events; roots are never partly counted.
 - `serve` holds an exclusive lock file in the state directory. Offline
   `restore` takes the same lock, so it cannot race the service.
 - Cursors and confirmation tokens bind a scope generation: the policy
