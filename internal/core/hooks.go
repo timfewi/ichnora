@@ -145,6 +145,10 @@ func (c *Core) Hook(ctx context.Context, caller Caller, req contract.HookRequest
 				return out, err
 			}
 			out.Ingested = n
+			if req.Harness == "opencode" {
+				out.AcceptedMessages = len(p.Messages)
+				out.OmittedMessages = openCodeOmissions(p.Messages)
+			}
 		}
 	}
 	if s.Recall && b.context != "" {
@@ -219,6 +223,11 @@ func (c *Core) recordBoundary(ctx context.Context, harness string, adapter inges
 		}
 	}
 	nativeEvent := fmt.Sprintf("hook:%s:%s:%s:%d:%d", b.label, p.AgentID, p.Trigger, size, len(p.Messages))
+	if harness == "opencode" {
+		// Equal-sized batches and in-place message updates are distinct
+		// boundaries; retries of the same batch remain idempotent.
+		nativeEvent += ":" + ingest.Digest([]byte(mustJSON(p.Messages)))
+	}
 	var sessionID string
 	recorded := false
 	err := c.write(ctx, func(tx *sql.Tx) error {
@@ -264,7 +273,30 @@ func (c *Core) ingestHook(ctx context.Context, harness string, adapter ingest.Ad
 			lines = append(lines, ingest.Line{No: int64(i + 1), Data: line})
 		}
 		// recordBoundary already linked a child session to its parent.
-		return c.storeEvents(ctx, adapter, s, sessionID, "plugin:"+harness, lines, &ingest.State{}, nil)
+		return c.storeEvents(ctx, adapter, s, sessionID, "plugin:"+harness, lines, &ingest.State{}, func(tx *sql.Tx, malformed int64) error {
+			if malformed == 0 && openCodeOmissions(p.Messages) == 0 {
+				return nil
+			}
+			for label, flag := range map[string]string{
+				"oversized_messages": "plugin_message_oversized",
+				"malformed_messages": "plugin_message_malformed",
+			} {
+				// Count committed omission events rather than deliveries: a lost
+				// response and retry must not inflate the coverage gap.
+				var count int
+				if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM events e WHERE session_id = ?
+					AND EXISTS (SELECT 1 FROM json_each(e.flags, '$.coverage') j WHERE j.value = ?)`, sessionID, flag).Scan(&count); err != nil {
+					return err
+				}
+				if count == 0 {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE sessions SET boundaries = json_set(boundaries, '$.'||?, ?) WHERE id = ?`, label, count, sessionID); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 	case p.Event == "SubagentStop" && p.AgentPath != "" && p.AgentID != "":
 		child := native + "/" + p.AgentID
 		var childID string
@@ -291,6 +323,19 @@ func (c *Core) ingestHook(ctx context.Context, harness string, adapter ingest.Ad
 		total += n
 	}
 	return total, nil
+}
+
+func openCodeOmissions(messages []json.RawMessage) int {
+	omitted := 0
+	for _, raw := range messages {
+		var message struct {
+			Role string `json:"role"`
+		}
+		if json.Unmarshal(raw, &message) == nil && message.Role == "ichnora_omission" {
+			omitted++
+		}
+	}
+	return omitted
 }
 
 // ingestFile reads one bounded increment of a native transcript. The file is
@@ -355,7 +400,14 @@ func (c *Core) storeEvents(ctx context.Context, adapter ingest.Adapter, s Scope,
 		evs, err := adapter.Parse(l.Data, state)
 		if err != nil {
 			malformed++
-			continue
+			if adapter.Harness() != "opencode" {
+				continue
+			}
+			// A plugin has no durable transcript cursor. Retain an idempotent
+			// gap marker before acknowledging a malformed message.
+			digest := ingest.Digest(l.Data)
+			evs = []ingest.Event{{NativeID: "malformed:" + digest, IDBasis: "fallback", Kind: ingest.KindOther,
+				Cwd: s.Root, SourceDigest: digest, Coverage: []string{"plugin_message_malformed"}}}
 		}
 		for i := range evs {
 			e := &evs[i]
@@ -404,8 +456,21 @@ func (c *Core) storeEvents(ctx context.Context, adapter ingest.Adapter, s Scope,
 			return err
 		}
 		for _, e := range events {
-			id := ingest.ID("evt_", sessionID, e.NativeID)
 			wt := attribution[e.Cwd]
+			projectID := ""
+			if wt != "" {
+				projectID = s.ProjectID
+			}
+			if adapter.Harness() == "opencode" && e.LegacyID != "" {
+				same, err := legacyOpenCodeReplay(ctx, tx, sessionID, projectID, wt, e)
+				if err != nil {
+					return err
+				}
+				if same {
+					continue
+				}
+			}
+			id := ingest.ID("evt_", sessionID, e.NativeID)
 			var project, worktree any
 			if wt != "" {
 				project, worktree = s.ProjectID, wt
@@ -440,6 +505,39 @@ func (c *Core) storeEvents(ctx context.Context, adapter ingest.Adapter, s Scope,
 		return nil
 	})
 	return inserted, err
+}
+
+// legacyOpenCodeReplay preserves adapter/1 evidence identities when an exact
+// source is replayed after upgrade. Wrapper metadata may change independently
+// of the permitted normalized content, so compare that content as well.
+func legacyOpenCodeReplay(ctx context.Context, tx *sql.Tx, session, project, worktree string, event ingest.Event) (bool, error) {
+	var digest, text, kind, tool, call, outcome, flags string
+	var previousProject, previousWorktree sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT source_digest, text, kind, tool_name, call_id, outcome, flags, project_id, worktree_id FROM events
+		WHERE session_id = ? AND native_id = ? AND adapter_version = 'opencode-adapter/1'`, session, event.LegacyID).
+		Scan(&digest, &text, &kind, &tool, &call, &outcome, &flags, &previousProject, &previousWorktree)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	// Equal text is not an exact replay when its verified attribution changed.
+	// An earlier unassigned source must not suppress a newly scoped version.
+	if previousProject.String != project || previousWorktree.String != worktree {
+		return false, nil
+	}
+	if digest == event.SourceDigest {
+		return true, nil
+	}
+	var previous ingest.Flags
+	if err := json.Unmarshal([]byte(flags), &previous); err != nil {
+		return false, nil
+	}
+	current := event.FlagsOf()
+	current.MessageKey = ""
+	return text == event.Text && kind == event.Kind && tool == event.ToolName && call == event.CallID &&
+		outcome == event.Outcome && mustJSON(previous) == mustJSON(current), nil
 }
 
 // turnBuilder groups events into bounded turns that start at user messages.

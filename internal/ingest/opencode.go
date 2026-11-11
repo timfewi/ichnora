@@ -11,7 +11,7 @@ import (
 type OpenCode struct{}
 
 func (OpenCode) Harness() string { return "opencode" }
-func (OpenCode) Version() string { return "opencode-adapter/1" }
+func (OpenCode) Version() string { return "opencode-adapter/2" }
 
 // Line wraps one OpenCode message for the line parser.
 type OpenCodeLine struct {
@@ -58,9 +58,16 @@ func (OpenCode) Parse(line []byte, st *State) ([]Event, error) {
 	one := func(i int, kind string) Event {
 		e := base
 		e.Kind = kind
-		e.NativeID = id
+		e.LegacyID = id
+		if basis == "native" {
+			e.MessageKey = id + "#" + strconv.Itoa(i)
+		}
+		// OpenCode can mutate a message in place while streaming. Preserve each
+		// observed version, with idempotent replay of byte-identical versions.
+		e.NativeID = id + "@" + digest
 		if i > 0 {
-			e.NativeID = id + "#" + strconv.Itoa(i)
+			e.NativeID += "#" + strconv.Itoa(i)
+			e.LegacyID += "#" + strconv.Itoa(i)
 		}
 		return e
 	}
@@ -73,6 +80,11 @@ func (OpenCode) Parse(line []byte, st *State) ([]Event, error) {
 		parts, _ = msg["parts"].([]any)
 	}
 	switch role {
+	case "ichnora_omission":
+		e := one(0, KindOther)
+		e.Truncated = true
+		e.Coverage = append(e.Coverage, "plugin_message_oversized")
+		return []Event{e}, nil
 	case "user":
 		if t := str(msg["text"]); t != "" {
 			e := one(0, KindUser)

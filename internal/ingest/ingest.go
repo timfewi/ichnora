@@ -33,7 +33,10 @@ type Event struct {
 	NativeID string
 	// MessageKey identifies a native message part across streaming versions.
 	// It is meaningful only together with the event's session identity.
-	MessageKey   string
+	MessageKey string
+	// LegacyID permits exact replay deduplication after an adapter identity
+	// upgrade. It never changes the identity of a new source version.
+	LegacyID     string
 	IDBasis      string
 	Session      string
 	Kind         string
@@ -196,16 +199,23 @@ func Timestamp(v any) string {
 // commandName keeps only the first literal word of a shell command.
 func commandName(cmd any) string {
 	var first string
+	word := func(s string) string {
+		fields := strings.Fields(s)
+		if len(fields) == 0 {
+			return ""
+		}
+		return fields[0]
+	}
 	switch c := cmd.(type) {
 	case string:
-		first = strings.Fields(c + " ")[0]
+		first = word(c)
 	case []any:
 		if len(c) > 0 {
 			first, _ = c[0].(string)
 			// Codex wraps commands as ["bash", "-lc", "..."].
 			if (first == "bash" || first == "sh" || first == "zsh") && len(c) > 2 {
 				if s, ok := c[2].(string); ok {
-					first = strings.Fields(s + " ")[0]
+					first = word(s)
 				}
 			}
 		}

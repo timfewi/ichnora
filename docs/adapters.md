@@ -29,6 +29,16 @@ The project does not install or pin the harnesses themselves.
 
 Status reports the declared matrix plus observed boundary counts per project.
 
+OpenCode forwards messages in order, using at most 200 messages and 512 KiB of
+escaped UTF-8 JSON per batch. A callback sends at most four batches within a
+three-second total deadline. Remaining versions stay in the plugin's pending
+queue even if a later callback compacts or replaces the message list. Only
+`accepted_messages` from a committed service response advances that queue;
+paused, skipped, failed and timed-out calls retain their pending messages.
+Messages over 64 KiB are replaced with explicit omission markers. The service
+reports committed `oversized_messages` and `malformed_messages` coverage counts
+under OpenCode's observed boundaries; retries do not inflate these counts.
+
 ## Hook registration
 
 Register command hooks explicitly in the harness's own configuration. For
@@ -56,6 +66,15 @@ the built executable. Full service and client setup is in
   raw line, so byte-identical lines in one session collapse into one event.
 - Hidden reasoning, tool arguments and tool outputs are never stored; only the
   tool name, call ID, outcome and literal command name are.
+- OpenCode message identities include the digest of the observed message
+  version. In-place streaming updates therefore become separate historical
+  source versions, while byte-identical retries remain idempotent. Earlier
+  versions remain historical evidence, not assertions of current state.
+  Replays from adapter version 1 reuse existing source records when content
+  and verified project/worktree attribution match. Changing attribution or
+  permitted content remains capturable after the upgrade.
+  The pending queue is process-local: restarting the plugin can only replay
+  versions still available in OpenCode's next message list.
 - Ichnora can stop re-injecting context; it cannot remove text already in a
   running conversation. Context refresh happens only at the boundaries above;
   otherwise a fresh conversation is needed.
