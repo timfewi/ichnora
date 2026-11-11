@@ -30,7 +30,10 @@ const (
 
 // Event is one normalized native record.
 type Event struct {
-	NativeID     string
+	NativeID string
+	// MessageKey identifies a native message part across streaming versions.
+	// It is meaningful only together with the event's session identity.
+	MessageKey   string
 	IDBasis      string
 	Session      string
 	Kind         string
@@ -55,6 +58,7 @@ type Event struct {
 
 // Flags is the persisted flag set of an event.
 type Flags struct {
+	MessageKey string   `json:"message_key,omitempty"`
 	Coverage   []string `json:"coverage,omitempty"`
 	Redactions []string `json:"redactions,omitempty"`
 	Truncated  bool     `json:"truncated,omitempty"`
@@ -65,7 +69,7 @@ type Flags struct {
 
 // FlagsOf extracts the persisted flags.
 func (e *Event) FlagsOf() Flags {
-	return Flags{Coverage: e.Coverage, Redactions: e.Redactions, Truncated: e.Truncated,
+	return Flags{MessageKey: e.MessageKey, Coverage: e.Coverage, Redactions: e.Redactions, Truncated: e.Truncated,
 		Injected: e.Injected, Derived: e.Derived, Child: e.Child}
 }
 

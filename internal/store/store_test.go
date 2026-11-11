@@ -140,3 +140,41 @@ func TestMigrationsAndVerify(t *testing.T) {
 		t.Fatal("a foreign file passed verification")
 	}
 }
+
+func TestSupportRootFormatMigrationPreservesLegacyData(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open(driverName, "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := migrations.ReadFile("migrations/0001_init.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, string(initial)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL) STRICT;
+		INSERT INTO schema_migrations VALUES (1, '0001_init.sql', '2026-01-01');
+		INSERT INTO meta (key, value) VALUES ('legacy_fixture', 'preserved');`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(ctx, path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if version, err := s.SchemaVersion(ctx); err != nil || version != 2 {
+		t.Fatalf("support root format must fence schema-1 binaries: version=%d err=%v", version, err)
+	}
+	for key, want := range map[string]string{"support_root_format": "2", "legacy_fixture": "preserved"} {
+		var got string
+		if err := s.Read().QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&got); err != nil || got != want {
+			t.Fatalf("migration metadata %s=%q, want %q: %v", key, got, want, err)
+		}
+	}
+}
