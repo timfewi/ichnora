@@ -401,6 +401,10 @@ type HookResult struct {
 	Skipped  string `json:"skipped,omitempty"`
 	Context  string `json:"context,omitempty"`
 	Paused   bool   `json:"ingestion_paused,omitempty"`
+	// AcceptedMessages acknowledges the entire committed OpenCode batch,
+	// including replayed messages and explicitly recorded coverage omissions.
+	AcceptedMessages int `json:"accepted_messages"`
+	OmittedMessages  int `json:"omitted_messages,omitempty"`
 }
 
 // StatusRequest is the `status` operation.

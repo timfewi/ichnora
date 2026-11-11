@@ -50,11 +50,18 @@ type Line struct {
 	Data   []byte
 }
 
-// Increment reads complete lines after the cursor, at most maxBytes, and
-// returns the advanced cursor. A trailing line without a newline is a partial
+// Increment reads complete lines after the cursor, with at most maxBytes plus
+// one byte of lookahead. maxLine is capped at maxBytes so a configured line
+// limit cannot prevent progress. A trailing line without a newline is a partial
 // write and stays unread. A replaced or truncated file restarts from zero;
 // event identities make the re-read idempotent.
 func Increment(cur Cursor, maxBytes int64, maxLine int) ([]Line, Cursor, error) {
+	if maxBytes <= 0 || maxBytes >= int64(int(^uint(0)>>1)) || maxLine <= 0 {
+		return nil, cur, errors.New("transcript read limits must be positive and fit in memory")
+	}
+	if int64(maxLine) > maxBytes {
+		maxLine = int(maxBytes)
+	}
 	f, err := os.OpenFile(cur.Path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, cur, err
@@ -79,7 +86,9 @@ func Increment(cur Cursor, maxBytes int64, maxLine int) ([]Line, Cursor, error) 
 	if _, err := f.Seek(next.Offset, io.SeekStart); err != nil {
 		return nil, cur, err
 	}
-	buf := make([]byte, maxBytes)
+	// The extra byte distinguishes a complete line exactly at the limit from
+	// an oversized one; neither should keep the cursor stuck at its start.
+	buf := make([]byte, int(maxBytes)+1)
 	n, err := io.ReadFull(f, buf)
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, cur, err
@@ -90,9 +99,11 @@ func Increment(cur Cursor, maxBytes int64, maxLine int) ([]Line, Cursor, error) 
 	for pos < len(buf) {
 		nl := bytes.IndexByte(buf[pos:], '\n')
 		if nl < 0 {
-			if len(buf)-pos > maxLine {
+			if next.Skipping || len(buf)-pos > maxLine {
 				// An oversized line still being written: discard it up to its newline.
-				next.Oversized++
+				if !next.Skipping {
+					next.Oversized++
+				}
 				next.Skipping = true
 				pos = len(buf)
 			}
@@ -101,11 +112,11 @@ func Increment(cur Cursor, maxBytes int64, maxLine int) ([]Line, Cursor, error) 
 		data := buf[pos : pos+nl]
 		start := next.Offset + int64(pos)
 		pos += nl + 1
+		next.LineNo++
 		if next.Skipping {
 			next.Skipping = false
 			continue
 		}
-		next.LineNo++
 		if len(data) > maxLine {
 			next.Oversized++
 			continue
