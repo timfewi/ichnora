@@ -44,6 +44,20 @@ let
     User = cfg.user;
   }
   // lib.optionalAttrs (cfg.group != null) { Group = cfg.group; };
+  socketParents = lib.unique (
+    map builtins.dirOf [
+      cfg.agentSocket
+      cfg.adminSocket
+    ]
+  );
+  within = root: path: path == root || lib.hasPrefix "${root}/" path;
+  normalized =
+    path:
+    lib.all (part: part != "" && part != "." && part != "..") (lib.tail (lib.splitString "/" path));
+  runtimeSocketParents = lib.filter (
+    parent: lib.hasPrefix "/run/" parent && !(within cfg.stateDir parent)
+  ) socketParents;
+  runtimeDirectories = map (lib.removePrefix "/run/") runtimeSocketParents;
 in
 {
   options.services.ichnora = {
@@ -86,7 +100,11 @@ in
     agentSocket = lib.mkOption {
       type = absolute;
       default = "/run/ichnora/agent.sock";
-      description = "Socket granting reader and capture roles to agents.";
+      description = ''
+        Socket granting reader and capture roles to agents. Its parent must be
+        a dedicated private directory below /run or inside stateDir. The module
+        creates runtime socket directories with mode 0700 and the service owner.
+      '';
     };
 
     adminSocket = lib.mkOption {
@@ -94,7 +112,8 @@ in
       default = "/run/ichnora/admin.sock";
       description = ''
         Socket that additionally grants owner administration. Do not project
-        it into agent sandboxes.
+        it into agent sandboxes. Its parent follows the same private-directory
+        requirements as agentSocket; do not use a shared runtime directory.
       '';
     };
 
@@ -194,6 +213,30 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.agentSocket != cfg.adminSocket;
+        message = "services.ichnora agentSocket and adminSocket must be different paths";
+      }
+      {
+        assertion = lib.all normalized [
+          cfg.stateDir
+          cfg.agentSocket
+          cfg.adminSocket
+        ];
+        message = "services.ichnora state and socket paths must not contain empty, '.' or '..' components";
+      }
+      {
+        assertion = lib.all (
+          parent: within cfg.stateDir parent || lib.hasPrefix "/run/" parent
+        ) socketParents;
+        message = "services.ichnora socket parents must be dedicated directories below /run or inside stateDir";
+      }
+      {
+        assertion = lib.all (parent: !(within parent cfg.stateDir)) runtimeSocketParents;
+        message = "services.ichnora stateDir must not lie inside a managed runtime socket directory";
+      }
+    ];
     environment.systemPackages = [ cfg.package ];
     # Plain CLI calls must reach the same sockets as the configured service,
     # including when the host overrides the module's default paths.
@@ -221,7 +264,7 @@ in
               "--config"
               "${configFile}"
             ];
-            RuntimeDirectory = "ichnora";
+            RuntimeDirectory = runtimeDirectories;
             RuntimeDirectoryMode = "0700";
             UMask = "0077";
             Restart = "on-failure";

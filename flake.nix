@@ -41,14 +41,23 @@
 
       nixosModules.default = import ./nix/module.nix { inherit self; };
 
-      checks = forAllSystems (system: {
-        # Building it runs `go test` against the linked Nix SQLite.
-        package = self.packages.${system}.ichnora;
-        module-eval = import ./tests/module-eval.nix {
-          inherit nixpkgs self;
-          pkgs = nixpkgs.legacyPackages.${system};
-        };
-      });
+      checks = forAllSystems (
+        system:
+        {
+          # Building it runs `go test` against the linked Nix SQLite.
+          package = self.packages.${system}.ichnora;
+          module-eval = import ./tests/module-eval.nix {
+            inherit nixpkgs self;
+            pkgs = nixpkgs.legacyPackages.${system};
+          };
+        }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          module-vm = import ./tests/module-vm.nix {
+            inherit self;
+            pkgs = nixpkgs.legacyPackages.${system};
+          };
+        }
+      );
 
       devShells = forAllSystems (
         system:

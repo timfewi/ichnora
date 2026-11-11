@@ -13,6 +13,7 @@ Coverage levels:
   on synthetic data. These tests are skipped unless configured.
 - **Evaluation**: NixOS module evaluation, not activation of a host.
 - **Build**: Nix package/check derivation, not a deployment assertion.
+- **VM**: a NixOS virtual machine starts the real packaged systemd service.
 - **Open**: no end-to-end coverage claimed.
 
 Dependency versions are recorded in `go.mod` and `flake.lock`. Native fixtures
@@ -49,6 +50,7 @@ and limits. Test names below are in `cmd/ichnora/` unless otherwise noted.
 | SQLite pragmas, linked FTS5, cancellation and newer-schema refusal                                                                                        | `internal/store` tests                                                                                                          | Fixture                  |
 | CLI socket variables override unrelated XDG/config defaults                                                                                               | `TestCLISocketEnvironment`                                                                                                      | Fixture                  |
 | NixOS service options and generated socket configuration                                                                                                  | `tests/module-eval.nix`                                                                                                         | Evaluation               |
+| NixOS custom socket directories, owner permissions, role enforcement and memory after service restart                                                     | `tests/module-vm.nix`                                                                                                           | VM                       |
 | Package build, vendor hash and package test phase                                                                                                         | Flake `checks.<system>.package`                                                                                                 | Build                    |
 | Live harness registration, process working directories, Codex hook trust and OpenCode plugin loader                                                       | No full live harness test                                                                                                       | Open                     |
 | Historical import against real user sessions                                                                                                              | Intentionally excluded from the synthetic test suite                                                                            | Open                     |
@@ -60,6 +62,11 @@ and limits. Test names below are in `cmd/ichnora/` unless otherwise noted.
 the installed-tool switches. A successful optional tool test is not evidence
 that an entire live harness integration works: the OpenCode test supplies its
 own plugin context, and evidence-tool tests operate on a synthetic repository.
+
+The GitHub Actions workflow runs the fast checks, the pinned Linux package and
+module evaluation, then the x86-64 NixOS VM check on a runner with KVM. The VM
+check is also available as `nix build .#checks.x86_64-linux.module-vm`. It tests
+an isolated synthetic host, not activation of an operator's existing machine.
 
 `TestMeasureSyntheticRetrieval` is an opt-in measurement harness using
 `ICHNORA_METER` and `ICHNORA_MEASURE_LOG`; keep its log outside the repository.
