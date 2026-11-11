@@ -117,6 +117,10 @@ client configuration if needed. `systemctl status ichnora` and
 `ExecStart` configuration path needed for offline restore. The generated config
 is in the Nix store, so never put secret data in module settings.
 
+For the NixOS module, use dedicated private socket directories below `/run` or
+within `stateDir`. Runtime directories are created with mode 0700 for the service
+user; shared directories and paths containing `.` or `..` are rejected.
+
 ## Socket discovery and enrollment
 
 Client precedence is the command's `--socket` / `--admin-socket` flag, then
@@ -251,10 +255,25 @@ ichnora restore --config /home/alice/.config/ichnora/config.json /home/alice/.lo
 
 For NixOS, substitute the config path from `systemctl cat ichnora`, then restart
 with `sudo systemctl start ichnora`. Restore takes the service's state lock,
-validates the backup and keeps the previous database beside it. Backups and
-previous databases retain subsequently deleted data; handle those copies
-separately. Secure deletion does not guarantee erasure from snapshots,
-copy-on-write filesystems or physical media.
+creates a private SQLite snapshot of the selected backup, and validates and
+migrates that snapshot before replacing the current database. It preserves a
+self-contained `ichnora.db.previous-*` snapshot of the current state, including
+committed WAL records left by a crashed service. If SQLite reports that the
+current database is corrupt, a private `ichnora.db.previous-*` directory retains
+its original database and sidecar bytes instead; this copy is recovery material,
+not a verified SQLite backup.
+
+Replacement is one atomic rename: interruption leaves either the current or the
+restored database at the canonical path. Files and containing directories are
+synchronized before success is reported. Interrupted attempts may leave private
+`.ichnora-restore-*` staging directories; these do not block a retry while the
+canonical database exists. If the canonical database is missing and restore
+artifacts remain, service startup refuses to create an empty database. Run
+`restore` with the selected verified backup before starting the service.
+
+Backups, previous databases and interrupted staging directories retain
+subsequently deleted data; handle those copies separately. Secure deletion does
+not guarantee erasure from snapshots, copy-on-write filesystems or physical media.
 
 ## Development and optional integration checks
 
