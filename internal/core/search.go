@@ -4,11 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"math"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/timfewi/ichnora/internal/contract"
@@ -18,21 +16,19 @@ import (
 // Groups in priority order: conflicts must survive small budgets first.
 var groupOrder = map[string]int{"conflict": 0, "working": 1, "lead": 2, "source": 3, "history": 4}
 
-// candidateLimit bounds the authorized candidate set before ranking.
-const candidateLimit = 500
-
 type claimRow struct {
+	RowID                                                                                                          int64
 	ID, Project, Worktree, Task, Kind, Title, Body, Rationale, Status, Reason, Origin, Lineage, Transform, Created string
 	EventTime, Validated, Expires, SupersededBy                                                                    string
 }
 
-const claimColumns = `c.id, c.project_id, coalesce(c.worktree_id, ''), coalesce(c.task_id, ''), c.kind, c.title, c.body,
+const claimColumns = `c.rowid, c.id, c.project_id, coalesce(c.worktree_id, ''), coalesce(c.task_id, ''), c.kind, c.title, c.body,
 	c.rationale, c.status, c.status_reason, c.origin, c.lineage, c.transform, c.created_at, coalesce(c.event_time, ''),
 	coalesce(c.validated_at, ''), coalesce(c.expires_at, ''), coalesce(c.superseded_by, '')`
 
 func scanClaim(rows interface{ Scan(...any) error }) (claimRow, error) {
 	var r claimRow
-	err := rows.Scan(&r.ID, &r.Project, &r.Worktree, &r.Task, &r.Kind, &r.Title, &r.Body, &r.Rationale, &r.Status,
+	err := rows.Scan(&r.RowID, &r.ID, &r.Project, &r.Worktree, &r.Task, &r.Kind, &r.Title, &r.Body, &r.Rationale, &r.Status,
 		&r.Reason, &r.Origin, &r.Lineage, &r.Transform, &r.Created, &r.EventTime, &r.Validated, &r.Expires, &r.SupersededBy)
 	return r, err
 }
@@ -167,12 +163,27 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	if err != nil {
 		return nil, 0, err
 	}
-	s, err := c.scope(ctx, caller)
+	ev, err := c.evaluator(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 	db := c.store.Read()
-	gen, err := c.scopeGeneration(ctx, db, s)
+	// One read snapshot keeps every candidate batch and the cursor generation
+	// consistent while concurrent writers continue through WAL.
+	snapshot, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer snapshot.Rollback()
+	// Enrollment and sharing must come from the same snapshot as the data.
+	s, ok, err := c.resolvePath(ctx, snapshot, caller.Cwd)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !ok {
+		return nil, 0, errNoScope
+	}
+	gen, err := c.scopeGeneration(ctx, snapshot, s)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -180,16 +191,9 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	norm := req
 	norm.Cursor, norm.MaxBytes, norm.Session = "", 0, nil
 	queryKey := c.sign("query", mustJSON(norm))[:16]
-	offset := 0
-	if req.Cursor != "" {
-		if offset, err = c.decodeCursor(req.Cursor, gen, scopeKey, queryKey); err != nil {
-			return nil, 0, err
-		}
-	}
 	terms, match := ftsQuery(req.Query)
-	ev, err := c.evaluator(ctx)
-	if err != nil {
-		return nil, 0, err
+	if req.Query != "" && match == "" {
+		return nil, 0, contract.Errf(contract.CodeInvalid, "query must contain at least one searchable word")
 	}
 	res := &contract.SearchResult{Scope: s.info(), View: req.View, Items: []contract.Item{}, Complete: true,
 		Notice: Notice, Budget: contract.BudgetInfo{MaxBytes: budget, Unit: contract.BudgetUnit}}
@@ -206,24 +210,26 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 		return false
 	}
 	var all []ranked
-	claims, err := c.claimCandidates(ctx, db, s, req, match, since, until)
+	supportMemo := map[string][]string{}
+	rankNow := c.Now()
+	err = walkClaims(ctx, snapshot, s, req, match, since, until, func(cl claimRow) error {
+		r, err := c.rankClaim(ctx, snapshot, ev, s, cl, req, terms, supportMemo, rankNow)
+		if err != nil {
+			return err
+		}
+		all = append(all, r)
+		return nil
+	})
 	if err != nil {
 		return nil, 0, err
 	}
-	for _, cl := range claims {
-		if !wantKind(cl.Kind) {
-			continue
-		}
-		r, err := c.rankClaim(ctx, db, ev, s, cl, req, terms)
-		if err != nil {
-			return nil, 0, err
-		}
-		all = append(all, r)
-	}
 	if req.Query != "" && wantKind("source") && req.View != "history" {
-		turns, err := c.turnCandidates(ctx, db, s, req, match, since, until, terms)
+		turns, err := turnCandidates(ctx, snapshot, s, req, match, since, until, terms)
 		if err != nil {
 			return nil, 0, err
+		}
+		if len(all)+len(turns) > maxSearchCandidates {
+			return nil, 0, errSearchTooBroad
 		}
 		all = append(all, turns...)
 	}
@@ -290,9 +296,23 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 			res.Totals.Unknown++
 		}
 	}
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM events e JOIN sessions x ON x.id = e.session_id
+	if err := snapshot.QueryRowContext(ctx, `SELECT count(*) FROM events e JOIN sessions x ON x.id = e.session_id
 		WHERE x.project_id = ? AND e.project_id IS NULL`, s.ProjectID).Scan(&res.Omitted.Unattributed); err != nil {
 		return nil, 0, err
+	}
+	// Files, environment epochs and expiry can change eligibility or ordering
+	// without writing the database. Bind offset cursors to the evaluated order
+	// as well as the persisted generation so such changes cannot skip records.
+	visibleIDs := make([]string, len(visible))
+	for i, r := range visible {
+		visibleIDs[i] = r.item.ID
+	}
+	gen = c.sign("results", gen, strings.Join(visibleIDs, "\x00"))
+	offset := 0
+	if req.Cursor != "" {
+		if offset, err = c.decodeCursor(req.Cursor, gen, scopeKey, queryKey); err != nil {
+			return nil, 0, err
+		}
 	}
 	if offset > len(visible) {
 		return nil, 0, errCursor
@@ -323,50 +343,6 @@ func appendOnce(list []string, s string) []string {
 	return append(list, s)
 }
 
-func (c *Core) claimCandidates(ctx context.Context, db *sql.DB, s Scope, req contract.SearchRequest, match, since, until string) ([]claimRow, error) {
-	var where []string
-	var args []any
-	from := `claims c`
-	if match != "" {
-		from = `claims_fts JOIN claims c ON c.rowid = claims_fts.rowid`
-		where = append(where, `claims_fts MATCH ?`)
-		args = append(args, match)
-	}
-	where = append(where, `(c.project_id = ? OR c.id IN (SELECT claim_id FROM shares WHERE to_project = ? AND revoked_at IS NULL))`)
-	args = append(args, s.ProjectID, s.ProjectID)
-	if req.TaskID != "" {
-		where = append(where, `c.task_id = ?`)
-		args = append(args, req.TaskID)
-	}
-	if req.SessionID != "" {
-		where = append(where, `json_extract(c.origin, '$.session') = ?`)
-		args = append(args, req.SessionID)
-	}
-	if since != "" {
-		where = append(where, `coalesce(c.event_time, c.created_at) >= ?`)
-		args = append(args, since)
-	}
-	if until != "" {
-		where = append(where, `coalesce(c.event_time, c.created_at) <= ?`)
-		args = append(args, until)
-	}
-	rows, err := db.QueryContext(ctx, `SELECT `+claimColumns+` FROM `+from+` WHERE `+strings.Join(where, " AND ")+
-		` ORDER BY c.created_at DESC, c.id LIMIT ?`, append(args, candidateLimit)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []claimRow
-	for rows.Next() {
-		r, err := scanClaim(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
 // conflictsOf lists unresolved contradictions with other active, visible claims.
 func conflictsOf(ctx context.Context, q querier, s Scope, id string) ([]string, error) {
 	rows, err := q.QueryContext(ctx, `SELECT o.id FROM links l JOIN claims o ON o.id = CASE WHEN l.from_id = ? THEN l.to_id ELSE l.from_id END
@@ -388,91 +364,6 @@ func conflictsOf(ctx context.Context, q querier, s Scope, id string) ([]string, 
 	return out, rows.Err()
 }
 
-// classify places a claim into a retrieval group.
-func classify(status, applicability string, conflicts int) string {
-	switch {
-	case status == "disputed" || (conflicts > 0 && active(status)):
-		return "conflict"
-	case status == "superseded" || status == "invalidated":
-		return "history"
-	case applicability == ApStale || applicability == ApExpired:
-		return "history"
-	case active(status) && (applicability == ApCurrent || applicability == ApDurable):
-		return "working"
-	}
-	return "lead"
-}
-
-func (c *Core) rankClaim(ctx context.Context, q querier, ev *evaluator, s Scope, cl claimRow, req contract.SearchRequest, terms []string) (ranked, error) {
-	refs, err := loadRefs(ctx, q, cl.ID)
-	if err != nil {
-		return ranked{}, err
-	}
-	v := ev.claim(cl.Kind, cl.Worktree, cl.Expires, depsOf(refs))
-	conflicts, err := conflictsOf(ctx, q, s, cl.ID)
-	if err != nil {
-		return ranked{}, err
-	}
-	group := classify(cl.Status, v.state, len(conflicts))
-	roots, err := supportRoots(ctx, q, cl.ID, 0, map[string][]string{})
-	if err != nil {
-		return ranked{}, err
-	}
-	lost := 0
-	for _, r := range refs {
-		if r.Role == "support" && r.State == "lost" {
-			lost++
-		}
-	}
-	text := cl.Title + " " + cl.Body
-	pv, trunc := preview(cl.Body)
-	if pv == "" {
-		pv, trunc = preview(cl.Title)
-	}
-	item := contract.Item{ID: cl.ID, Group: group, Kind: cl.Kind, Title: cl.Title, Preview: pv, Truncated: trunc,
-		Status: cl.Status, Applicability: v.state, Reasons: []string{}, TaskID: cl.Task, ReplacedBy: cl.SupersededBy,
-		ConflictsWith: conflicts,
-		Provenance: contract.Provenance{Origin: originLabel(cl.Origin), CreatedAt: cl.Created, EventTime: cl.EventTime,
-			ValidatedAt: cl.Validated, Support: len(roots), LostSupport: lost, Derivation: cl.Transform}}
-	if cl.Project != s.ProjectID {
-		item.Provenance.SharedFrom = "shared claim from another project"
-	}
-	score := 0.0
-	if req.TaskID != "" && cl.Task == req.TaskID {
-		score += 8
-		item.Reasons = append(item.Reasons, "task match")
-	}
-	for _, f := range req.Files {
-		for _, r := range refs {
-			if (r.Kind == "file" || r.Kind == "ast") && r.Detail.Path == f {
-				score += 6
-				item.Reasons = appendOnce(item.Reasons, "file match: "+f)
-			}
-		}
-	}
-	if n, ok := coverage(terms, text); ok {
-		score += 4 * float64(n) / float64(len(terms))
-		item.Reasons = append(item.Reasons, "terms matched: "+itoa(n)+"/"+itoa(len(terms)))
-		if hit, _ := coverage(terms, cl.Title); hit > 0 {
-			score++
-		}
-	}
-	switch v.state {
-	case ApCurrent:
-		score += 2
-	case ApDurable:
-		score += 1.5
-	}
-	item.Reasons = append(item.Reasons, "applicability "+v.state)
-	item.Reasons = append(item.Reasons, firstN(v.reasons, 3)...)
-	if t, err := time.Parse(contract.TimeFormat, cl.Created); err == nil {
-		days := c.Now().Sub(t).Hours() / 24
-		score += 1 / (1 + math.Max(days, 0)/30)
-	}
-	return ranked{item: item, group: group, score: score, created: cl.Created, lineage: cl.Lineage,
-		unknown: v.state == ApUnknown || v.state == ApUnchecked}, nil
-}
-
 func firstN(s []string, n int) []string {
 	if len(s) > n {
 		return s[:n]
@@ -483,53 +374,6 @@ func firstN(s []string, n int) []string {
 func itoa(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
-}
-
-func (c *Core) turnCandidates(ctx context.Context, db *sql.DB, s Scope, req contract.SearchRequest, match, since, until string, terms []string) ([]ranked, error) {
-	where := []string{`turns_fts MATCH ?`, `t.project_id = ?`, `t.invalid = ''`}
-	args := []any{match, s.ProjectID}
-	if req.SessionID != "" {
-		where = append(where, `t.session_id = ?`)
-		args = append(args, req.SessionID)
-	}
-	if since != "" {
-		where = append(where, `t.event_time >= ?`)
-		args = append(args, since)
-	}
-	if until != "" {
-		where = append(where, `t.event_time <= ?`)
-		args = append(args, until)
-	}
-	rows, err := db.QueryContext(ctx, `SELECT t.id, t.session_id, t.text, t.truncated, coalesce(t.event_time, ''), t.digest,
-		coalesce(t.prev_id, ''), coalesce(t.next_id, ''), x.harness FROM turns_fts JOIN turns t ON t.rowid = turns_fts.rowid
-		JOIN sessions x ON x.id = t.session_id WHERE `+strings.Join(where, " AND ")+` ORDER BY t.rowid DESC LIMIT ?`,
-		append(args, candidateLimit)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []ranked
-	for rows.Next() {
-		var id, session, text, at, digest, prev, next, harness string
-		var truncated bool
-		if err := rows.Scan(&id, &session, &text, &truncated, &at, &digest, &prev, &next, &harness); err != nil {
-			return nil, err
-		}
-		n, _ := coverage(terms, text)
-		pv, trunc := preview(text)
-		item := contract.Item{ID: id, Group: "source", Kind: "turn", Preview: pv, Truncated: trunc || truncated,
-			Status: "observed", Applicability: "historical", Reasons: []string{"terms matched: " + itoa(n) + "/" + itoa(len(terms)),
-				"historical session record; not validated as current"},
-			Provenance: contract.Provenance{Origin: "ingest:" + harness + " " + session, CreatedAt: at, EventTime: at,
-				Support: 1, SourceDigest: digest}}
-		for _, nb := range []string{prev, next} {
-			if nb != "" {
-				item.Neighbors = append(item.Neighbors, nb)
-			}
-		}
-		out = append(out, ranked{item: item, group: "source", score: 4 * float64(n) / float64(max(len(terms), 1)), created: at})
-	}
-	return out, rows.Err()
 }
 
 // Read returns full records for up to 20 IDs. Each ID is re-checked against

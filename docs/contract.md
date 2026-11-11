@@ -52,8 +52,10 @@ turn and session IDs derive deterministically from native identity, so retries
 are idempotent. Every read re-checks the record's project against the caller's
 current scope; revocation or withdrawal makes previously returned IDs
 `out_of_scope`. Cursors are HMAC-signed with a per-state secret and bind the
-scope digest, database generation, query digest and offset; any write,
-revocation or policy change expires them.
+scope digest, database generation, query digest, evaluated result order and
+offset; a relevant write, revocation or policy change expires them. A source-file
+edit, environment change or expiry that changes result membership or ordering
+also expires the cursor, even when the database has not been written.
 
 ## Operations
 
@@ -81,6 +83,26 @@ Roles: R = reader, C = capture, A = admin.
 | `reconcile`                             | A    | —                                                                                                                                                                                                                           | cursors advanced                                                                                                                                                   |
 | `backup`                                | A    | `out`                                                                                                                                                                                                                       | path and size                                                                                                                                                      |
 | `environment`                           | A    | —                                                                                                                                                                                                                           | current descriptor and epoch                                                                                                                                       |
+
+### Search traversal
+
+An empty `query` returns the project claim index. A nonempty query must contain
+at least one searchable word after normalization; whitespace-only, symbol-only
+and overlong-word-only queries return `invalid_request` instead of being passed
+to FTS5. A `task_id` filter applies to claims and to source turns whose session
+is assigned to that task. Unassigned sessions do not match a task filter.
+
+Scope, kind, task, session and time filters are applied in SQL. Matching records
+are fetched in batches of 500 within one read snapshot, then classified and
+ranked before pagination. The batch size is not a total-result cutoff: old
+claims, including decisions and conflicts, remain eligible. Totals describe the
+full ranked result set, and cursors can traverse it beyond the first batch.
+
+A request examining more than 10,000 matching records fails explicitly with
+`invalid_request`; narrow the query or filters. It never returns an apparently
+complete subset from that examination limit. Task resume uses the same explicit
+bound for its linked claims rather than silently retaining the first 200.
+Response item limits and `max_bytes` apply independently after ranking.
 
 ### Claim fields
 
