@@ -1,5 +1,7 @@
 # Ichnora
 
+![Ichnora violet checkpoint banner](docs/assets/ichnora-banner.png)
+
 Local memory with provenance for coding agents. Ichnora keeps project-scoped
 claims, decisions and task checkpoints, indexes permitted session text, and
 helps a later session distinguish current evidence from stale history.
