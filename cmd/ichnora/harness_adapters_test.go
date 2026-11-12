@@ -344,3 +344,22 @@ func TestOpenCodePluginInEmbeddedRuntime(t *testing.T) {
 		t.Fatalf("plugin-forwarded messages must be ingested once: %+v", s.Totals)
 	}
 }
+
+// Claude names its transcript at startup before writing the first line; the
+// hook must still deliver recall context instead of a policy denial.
+func TestSessionStartBeforeTranscriptExists(t *testing.T) {
+	e := newEnv(t, nil)
+	e.enroll(e.alpha, "--collect", "--recall")
+	session := "claude-unwritten"
+	transcript := filepath.Join(e.claudeRoot, "p", session+".jsonl")
+	start := map[string]any{"hook_event_name": "SessionStart", "source": "startup", "session_id": session,
+		"transcript_path": transcript, "cwd": e.alpha, "model": "m", "permission_mode": "default"}
+	out := e.hook(e.alpha, "claude", start)
+	var native map[string]any
+	if err := json.Unmarshal([]byte(out), &native); err != nil || native["hookSpecificOutput"] == nil {
+		t.Fatalf("SessionStart without a written transcript must return native hook JSON: %q", out)
+	}
+	if strings.Contains(out, "policy_denied") {
+		t.Fatalf("an unwritten transcript is not a policy violation: %q", out)
+	}
+}

@@ -316,6 +316,11 @@ func (c *Core) ingestHook(ctx context.Context, harness string, adapter ingest.Ad
 		}
 	}
 	if p.TranscriptPath != "" {
+		// A harness names its transcript at session start before writing it;
+		// nothing is read, and later boundaries ingest the file.
+		if _, err := os.Lstat(p.TranscriptPath); p.Event == "SessionStart" && errors.Is(err, os.ErrNotExist) {
+			return total, nil
+		}
 		n, err := c.ingestFile(ctx, harness, adapter, s, sessionID, p.TranscriptPath)
 		if err != nil {
 			return total, err
