@@ -71,7 +71,7 @@ func TestHarnessAdaptersAndCrossHarnessResume(t *testing.T) {
 	// The first harness records its decision and unfinished task.
 	t.Setenv("CLAUDE_CODE_SESSION_ID", claude)
 	decision := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Invalidate parser cache by digest",
-		Support: []contract.Ref{{Kind: "turn", Ref: planning}}})[0]
+		Support: []contract.Ref{{Kind: "turn", Ref: planning}}, Depends: []contract.Ref{{Kind: "file", Path: "parser/cache.go"}}})[0]
 	digest := sha(t, filepath.Join(e.alpha, "parser", "cache.go"))
 	r := e.must(e.alpha, checkpointJSON(t, contract.Checkpoint{Objective: "Digest-keyed parser cache",
 		Remaining: []string{"add the digest regression test"}, Decisions: []string{decision}, NextAction: "write the regression test",

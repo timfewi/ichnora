@@ -23,7 +23,7 @@ func TestSearchAndResumeTraverseAllCandidateBatches(t *testing.T) {
 	e := newEnv(t, func(c *config.Config) { c.Limits.Readers = 1 })
 	e.enroll(e.alpha)
 	task := searchTask(t, e, "Large synthetic catalog")
-	old := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog durable decision", TaskID: task})[0]
+	old := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog durable decision", TaskID: task, ExpiresAt: futureExpiry()})[0]
 	conflict := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog conflict one", TaskID: task})[0]
 	e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog conflict two", TaskID: task, Contradicts: []string{conflict}})
 	for batch := 0; batch < 25; batch++ {
@@ -33,7 +33,7 @@ func TestSearchAndResumeTraverseAllCandidateBatches(t *testing.T) {
 		}
 		e.captureIDs(e.alpha, claims...)
 	}
-	last := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog late task decision", TaskID: task})[0]
+	last := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Catalog late task decision", TaskID: task, ExpiresAt: futureExpiry()})[0]
 	filtered := e.search(e.alpha, "catalog", "--kind", "decision", "--limit", "50", "--max-bytes", "262144")
 	if len(filtered.Items) != 4 || find(filtered.Items, old) == nil || filtered.Totals.Conflicts != 2 || !filtered.Complete {
 		t.Fatalf("older decisions or conflicts disappeared: %+v", filtered)
@@ -123,8 +123,8 @@ func TestSearchCursorExpiresWhenSourceChangesBetweenPages(t *testing.T) {
 	e.enroll(e.alpha)
 	e.captureIDs(e.alpha,
 		contract.ClaimInput{Kind: "decision", Title: "File-sensitive parser decision", Depends: []contract.Ref{{Kind: "file", Path: "parser/cache.go"}}},
-		contract.ClaimInput{Kind: "decision", Title: "Durable parser decision one"},
-		contract.ClaimInput{Kind: "decision", Title: "Durable parser decision two"})
+		contract.ClaimInput{Kind: "decision", Title: "Durable parser decision one", ExpiresAt: futureExpiry()},
+		contract.ClaimInput{Kind: "decision", Title: "Durable parser decision two", ExpiresAt: futureExpiry()})
 	first := e.search(e.alpha, "parser decision", "--limit", "1")
 	if first.NextCursor == "" {
 		t.Fatal("expected a next cursor")

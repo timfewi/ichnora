@@ -213,17 +213,21 @@ func (e *evaluator) tabulaDep(v *verdict, root string, d contract.Ref) {
 }
 
 // claim computes a claim's applicability from its expiry and dependencies.
+// Only an expiry keeps a dependency-free decision durable: without one nothing
+// could ever revalidate it, so it stays an unchecked lead.
 func (e *evaluator) claim(kind, worktree, expires string, deps []contract.Ref) verdict {
 	v := verdict{state: ApCurrent}
 	if expires != "" && expires <= e.now {
 		v.mark(ApExpired, "expired")
 	}
 	if len(deps) == 0 {
-		if v.state == ApExpired {
+		switch {
+		case v.state == ApExpired:
 			return v
-		}
-		if kind == "decision" {
-			return verdict{state: ApDurable, reasons: []string{"decision without declared dependencies"}}
+		case kind == "decision" && expires != "":
+			return verdict{state: ApDurable, reasons: []string{"decision without dependencies, bounded by its expiry"}}
+		case kind == "decision":
+			return verdict{state: ApUnchecked, reasons: []string{"decision without dependencies or expiry; not validated"}}
 		}
 		return verdict{state: ApUnchecked, reasons: []string{"no dependencies declared; not validated"}}
 	}

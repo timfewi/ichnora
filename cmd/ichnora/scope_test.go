@@ -94,9 +94,9 @@ func TestSmallBudgetKeepsConflictsAndUnknowns(t *testing.T) {
 	e := newEnv(t, nil)
 	e.enroll(e.alpha)
 	x := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "decision", Title: "Ship the parser behind a flag " + strings.Repeat("ü", 80),
-		Body: strings.Repeat("Unicode 😀 metadata ", 40)})[0]
+		Body: strings.Repeat("Unicode 😀 metadata ", 40), ExpiresAt: futureExpiry()})[0]
 	e.captureIDs(e.alpha,
-		contract.ClaimInput{Kind: "decision", Title: "Ship the parser without a flag", Contradicts: []string{x}},
+		contract.ClaimInput{Kind: "decision", Title: "Ship the parser without a flag", Contradicts: []string{x}, ExpiresAt: futureExpiry()},
 		contract.ClaimInput{Kind: "observation", Title: "Parser flag usage is unclear", Body: "No dependency declared."})
 	for _, budget := range []string{"1024", "1300", "2048"} {
 		r := e.must(e.alpha, "", "search", "parser flag", "--max-bytes", budget)

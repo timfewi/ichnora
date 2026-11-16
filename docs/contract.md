@@ -109,8 +109,10 @@ Response item limits and `max_bytes` apply independently after ranking.
 `status` is the evidence status: `observed`, `inferred`, `disputed`,
 `superseded`, `invalidated`, `unsupported` (no remaining support). It is
 separate from `applicability`, computed at read time: `current` (all declared
-dependencies validated now), `durable` (decision without dependencies),
-`unchecked` (observation without dependencies), `stale` (a dependency changed),
+dependencies validated now), `durable` (decision without dependencies but
+with an unexpired `expires_at`), `unchecked` (observation without
+dependencies, or decision with neither dependencies nor expiry), `stale` (a
+dependency changed),
 `expired`, `unknown` (a dependency cannot be validated now).
 
 The working view contains only `observed`/`inferred` claims whose
