@@ -81,7 +81,7 @@ just verify    # Nix build/test gate; potentially expensive
 
 The dev shell supplies the pinned tools and enables CGo plus the `libsqlite3`
 build tag. `just check` uses the public
-[project-check](https://github.com/timfewi/project-check-nix) runner for formatting,
+[project-check](https://github.com/timfewi/project-check) runner for formatting,
 Go vet/tests, Nix lint and offline flake evaluation. `just verify` runs the Nix
 flake checks, including package tests. Tests use synthetic data; optional live
 tool checks are described in [Operations](docs/operations.md).
