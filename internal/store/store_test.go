@@ -168,7 +168,7 @@ func TestSupportRootFormatMigrationPreservesLegacyData(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if version, err := s.SchemaVersion(ctx); err != nil || version != 2 {
+	if version, err := s.SchemaVersion(ctx); err != nil || version != 3 {
 		t.Fatalf("support root format must fence schema-1 binaries: version=%d err=%v", version, err)
 	}
 	for key, want := range map[string]string{"support_root_format": "2", "legacy_fixture": "preserved"} {

@@ -64,6 +64,10 @@ and limits. Test names below are in `cmd/ichnora/` unless otherwise noted.
 | OpenCode acknowledgements require committed batches, and legacy replay respects changed attribution                                                       | `TestOpenCodeAcknowledgesCommittedVersionsAndCoverage`, `TestOpenCodePausedBatchIsNotAcknowledged`, `TestOpenCodeLegacyReplayKeepsChangedAttribution`                                               | Fixture                  |
 | OpenCode byte-bounded backlog, retry, compaction and message updates work in an embedded runtime                                                          | `TestOpenCodeBatchTransportInEmbeddedRuntime`                                                                                                                                                       | Optional tool            |
 
+`TestSimPredictionSurvivesReplayAndScope` exercises the improvement history CLI
+and service with synthetic evidence files, restart, replay, conflicting writes,
+pagination, project scope, evidence-path policy and project retention preview.
+
 ## Optional checks and interpretation
 
 [Operations](operations.md#development-and-optional-integration-checks) describes

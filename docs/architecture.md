@@ -131,6 +131,16 @@ candidate set as complete. Output remains separately bounded by page size and
 serialized UTF-8 bytes. Task resume examines all linked claims under the same
 explicit bound and sorts ties by stable record identity.
 
+## Improvement attempts
+
+Schema 3 adds an append-only sequence of attempts for each explicit problem key
+in a project. The service serializes proposals and observations on its writer.
+A retry can acknowledge the same input, while divergent writes conflict.
+Observations retain the original file digest and worktree as historical
+evidence, including when a later file changes. Project retention counts and
+removes these records. Clients use the `sim` service operation or `memory_sim`
+MCP tool. The caller runs the evaluation and records its result.
+
 ## Model boundary
 
 The core performs no model calls. Ingestion stores bounded, permitted fields;

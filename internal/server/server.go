@@ -198,6 +198,16 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request, granted map[cont
 func Dispatch(ctx context.Context, c *core.Core, caller core.Caller, op string, body io.Reader) ([]byte, *contract.Error) {
 	fail := func(err error) ([]byte, *contract.Error) { return nil, c.AsProtocolError(op, err) }
 	switch op {
+	case "sim":
+		var req contract.SimRequest
+		if err := contract.Decode(body, &req); err != nil {
+			return fail(err)
+		}
+		res, budget, err := c.Sim(ctx, caller, req)
+		if err != nil {
+			return fail(err)
+		}
+		return encode(op, res, budget, c)
 	case "search":
 		var req contract.SearchRequest
 		if err := contract.Decode(body, &req); err != nil {

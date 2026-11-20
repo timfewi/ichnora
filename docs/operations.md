@@ -181,6 +181,31 @@ To turn both off while retaining manual access, re-enroll without either flag.
 `withdraw PROJECT_ID` disables project access and ingestion but retains history;
 it is not deletion.
 
+## Record an improvement attempt
+
+Choose a stable problem key for a recurring diagnosis and a fresh attempt key
+for each trial. In an enrolled project, record the intervention and its expected
+effect before evaluating it. After the evaluation, point the outcome at the
+project-relative result file. The service records its worktree, path and SHA-256
+digest. Each history page preserves the original prediction and any observed
+outcome, including an unsuccessful one.
+
+```sh
+ichnora sim propose parser-cache ttl-v1 --cause "The parser reused an old result" \
+  --change "Expire entries after one second" --prediction "Both invalidation cases pass" \
+  --context "Synthetic cache suite v1, two cases"
+# Run the evaluation and write its result to checks/cache.txt.
+ichnora sim observe parser-cache ttl-v1 --outcome "1/2 passed, the immediate retry failed" \
+  --evidence checks/cache.txt
+ichnora sim history parser-cache
+```
+
+Retry with the same keys and inputs to acknowledge the same proposal or
+observation. Changed inputs require a new attempt key. Continue a history
+page with `--offset` set to its `next_offset`. Set `--max-bytes` to retrieve
+a record larger than the current response budget. These explicit operations
+use the agent socket and work with automatic collection and recall disabled.
+
 ## Register clients and hooks explicitly
 
 Configure your harness's stdio MCP server entry to launch the installed binary
@@ -275,8 +300,8 @@ Backups, previous databases and interrupted staging directories retain
 subsequently deleted data; handle those copies separately. Secure deletion does
 not guarantee erasure from snapshots, copy-on-write filesystems or physical media.
 
-Schema 2 records versioned message support identities. Once opened by this
-version, the database is refused by schema-1 binaries; rolling back the binary
+Schema 3 adds project-scoped improvement attempts to schema 2’s versioned
+message support identities. After migration, older binaries refuse this database; rolling back the binary
 requires a compatible backup from before migration. Legacy source references
 remain readable by this version.
 

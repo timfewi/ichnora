@@ -43,7 +43,8 @@ most 280 bytes and flagged. As a last resort `resume` shortens its free-text
 header fields to 96 bytes with an ellipsis. `complete` is `false` whenever
 anything was omitted. Byte counts are bytes, not tokens; no token estimate is
 reported. `insufficient_budget` is reserved for a skeleton that still does not
-fit, which the bounds above are designed to prevent.
+fit, which the bounds above are designed to prevent. Improvement history also uses
+this error when its first complete attempt exceeds the requested budget.
 
 ## Identifiers and cursors
 
@@ -83,6 +84,29 @@ Roles: R = reader, C = capture, A = admin.
 | `reconcile`                             | A    | —                                                                                                                                                                                                                           | cursors advanced                                                                                                                                                   |
 | `backup`                                | A    | `out`                                                                                                                                                                                                                       | path and size                                                                                                                                                      |
 | `environment`                           | A    | —                                                                                                                                                                                                                           | current descriptor and epoch                                                                                                                                       |
+
+### Improvement attempts
+
+`POST /v1/sim` takes `action`, `problem` and the action-specific fields below.
+Problem and attempt identifiers start with an ASCII letter or digit and use
+up to 80 ASCII letters, digits, periods, underscores or hyphens. The service
+derives the owning project from the caller. Improvement history is project-local.
+The CLI exposes this operation as `ichnora sim`, MCP as `memory_sim`.
+
+- `propose` requires capture authority, an `attempt` key and nonempty `cause`,
+  `change`, `prediction` and `context` fields (each up to 1200 bytes).
+- `observe` requires capture authority and an existing `attempt`, `outcome`
+  (up to 1200 bytes) and `evidence` (a permitted project-relative file).
+  The service binds the observation to the file digest and worktree at capture.
+  Both write operations return the problem and attempt keys. Replays with the
+  same inputs succeed. Conflicting proposals or observations return `conflict`.
+- `history` requires reader authority. Results include `attempts` in proposal
+  order and the original evaluation context. An omitted outcome is pending.
+  Historical results describe the observed run. Check the stored file digest
+  before using the result as evidence for a new change. `limit` defaults to
+  10 and permits up to 50. Pass the returned `next_offset` as `offset` to
+  continue. Histories preserve whole attempts within `max_bytes`; a single
+  attempt larger than the budget returns `insufficient_budget`.
 
 ### Search traversal
 

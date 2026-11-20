@@ -66,6 +66,10 @@ func Server(version string, client server.Client, hint func() *contract.SessionH
 			in.Session = hint()
 			return call(ctx, "task", in.TaskRequest)
 		})
+	mcp.AddTool(s, &mcp.Tool{Name: "memory_sim", Description: "Read improvement attempts for a problem with action history. Capture a proposal before evaluating it, then observe the outcome with a project-relative evidence file."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.SimRequest) (*mcp.CallToolResult, any, error) {
+			return call(ctx, "sim", in)
+		})
 	mcp.AddTool(s, &mcp.Tool{Name: "memory_status", Description: "Service health, caller scope, storage, environment and adapter coverage."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.StatusRequest) (*mcp.CallToolResult, any, error) {
 			return call(ctx, "status", in)
