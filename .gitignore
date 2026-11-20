@@ -1,4 +1,8 @@
 .direnv/
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
+devenv.local.yaml
 .tabula/
 result
 result-*

@@ -10,10 +10,9 @@
   };
 
   outputs =
-    {
+    inputs@{
       self,
       nixpkgs,
-      project-check,
       ...
     }:
     let
@@ -67,35 +66,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
-          default = pkgs.mkShell {
-            packages = [
-              project-check.packages.${system}.project-check
-              pkgs.bashInteractive
-              pkgs.coreutils
-              pkgs.deadnix
-              pkgs.git
-              pkgs.go_1_26
-              pkgs.govulncheck
-              pkgs.jq
-              pkgs.just
-              pkgs.nix
-              pkgs.nixfmt
-              pkgs.pkg-config
-              pkgs.prettier
-              pkgs.python3
-              pkgs.ripgrep
-              pkgs.shfmt
-              pkgs.sqlite
-              pkgs.statix
-              pkgs.zizmor
-            ];
-            # Builds never download another toolchain.
-            env = {
-              CGO_ENABLED = "1";
-              GOTOOLCHAIN = "local";
-              GOFLAGS = "-tags=libsqlite3";
-            };
-          };
+          default = pkgs.mkShell (import ./devenv.nix { inherit pkgs inputs; });
         }
       );
 

@@ -70,8 +70,10 @@ network fallback. See [Architecture](docs/architecture.md) for the trust boundar
 
 ## Development
 
+From the repository root, enter the development shell with `devenv shell --reload`
+or `nix develop .`. Both use the toolchain declared in `nix/devenv.nix`.
+
 ```sh
-nix develop .
 just fmt       # apply repository formatting
 just check     # fast gate
 just verify    # Nix build/test gate; potentially expensive
