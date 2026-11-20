@@ -2,7 +2,7 @@
   description = "Ichnora: local memory with provenance for coding agents";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/eaad089433ca2bb662274377d33df3d0e51ef28b";
+    nixpkgs.url = "github:NixOS/nixpkgs/0bb8272318b4ca41bf0edc6224df3e3e3046b70d";
     project-check = {
       url = "github:timfewi/project-check-nix/56962fbd92f992938f39b44b2590adf843ebe757";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -28,7 +28,9 @@
       packages = forAllSystems (
         system:
         let
-          ichnora = nixpkgs.legacyPackages.${system}.callPackage ./nix/package.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+          ichnora = pkgs.callPackage ./nix/package.nix {
+            buildGoModule = pkgs.buildGo126Module;
             inherit version;
             src = self;
           };
@@ -72,7 +74,8 @@
               pkgs.coreutils
               pkgs.deadnix
               pkgs.git
-              pkgs.go
+              pkgs.go_1_26
+              pkgs.govulncheck
               pkgs.jq
               pkgs.just
               pkgs.nix
@@ -84,6 +87,7 @@
               pkgs.shfmt
               pkgs.sqlite
               pkgs.statix
+              pkgs.zizmor
             ];
             # Builds never download another toolchain.
             env = {

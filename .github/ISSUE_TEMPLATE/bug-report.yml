@@ -1,0 +1,28 @@
+name: Bug report
+description: Report unexpected behavior in Ichnora.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Ichnora version or commit
+      description: Run `ichnora version` or provide the source commit.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include your Linux distribution, installation method, and affected client or adapter.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Use synthetic data. Remove real session text, credentials, and identifying details from any examples or logs.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
