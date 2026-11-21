@@ -86,6 +86,19 @@ Go vet/tests, Nix lint and offline flake evaluation. `just verify` runs the Nix
 flake checks, including package tests. Tests use synthetic data; optional live
 tool checks are described in [Operations](docs/operations.md).
 
+## Memory format benchmark
+
+How does the format of prior observations affect an optimizer learning to route
+synthetic tickets? Using `gpt-6-luna`, Pi and Codex each ran five paired trials.
+In each trial the three variants started from the same policy and received the
+same prior observations as plain notes, Ichnora claims (main), or a history of
+problems and attempts (SIM). All trials used the same 32 held-out tickets.
+
+![Correct routes out of 160. Pi scored 100 with plain notes, 109 with main and 89 with SIM. Codex scored 96, 101 and 105 respectively. Both started at 107.](docs/assets/ichnora-luna-transfer.png)
+
+Pi with SIM trailed main in four of five trials. Codex with SIM beat main twice,
+tied once and trailed twice.
+
 ## Documentation
 
 - [Operations](docs/operations.md): configuration, clients, collection and maintenance.
