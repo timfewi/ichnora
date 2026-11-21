@@ -28,6 +28,7 @@ Agent commands (agent socket):
   search QUERY            scoped retrieval (--view, --task, --session, --kind, --file, --since, --until, --limit, --cursor)
   read ID...              batch details
   evidence CLAIM_ID       validate support and dependencies (--lines)
+  sim propose|observe|history   record and retrieve problem-specific attempts (see docs/operations.md)
   capture                 record claims; JSON CaptureRequest on stdin
   update ID               --status disputed|invalidated --reason TEXT
   task list|create|checkpoint|transition   (see docs/contract.md)
@@ -198,6 +199,26 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 2
 		}
 		return call(false, "evidence", contract.EvidenceRequest{ID: pos[0], ExcerptLines: lines, MaxBytes: c.maxBytes})
+	case "sim":
+		var req contract.SimRequest
+		fs.StringVar(&req.Cause, "cause", "", "suspected root cause")
+		fs.StringVar(&req.Change, "change", "", "proposed intervention")
+		fs.StringVar(&req.Prediction, "prediction", "", "expected outcome")
+		fs.StringVar(&req.Context, "context", "", "evaluation context")
+		fs.StringVar(&req.Outcome, "outcome", "", "observed outcome")
+		fs.StringVar(&req.Evidence, "evidence", "", "project-relative evaluation artifact")
+		fs.IntVar(&req.Offset, "offset", 0, "history offset")
+		fs.IntVar(&req.Limit, "limit", 0, "history page size")
+		pos, ok := parse()
+		if !ok || len(pos) < 2 || len(pos) > 3 {
+			fmt.Fprintln(stderr, "usage: ichnora sim propose|observe PROBLEM ATTEMPT [flags] or ichnora sim history PROBLEM")
+			return 2
+		}
+		req.Action, req.Problem, req.MaxBytes = pos[0], pos[1], c.maxBytes
+		if len(pos) == 3 {
+			req.Attempt = pos[2]
+		}
+		return call(false, "sim", req)
 	case "capture":
 		if _, ok := parse(); !ok {
 			return 2

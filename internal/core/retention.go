@@ -121,6 +121,13 @@ func anys(s []string) []any {
 func (c *Core) countSelection(ctx context.Context, q querier, sel selection) (map[string]int, []string, error) {
 	counts := map[string]int{"claims": len(sel.claims), "sessions": len(sel.sessions), "tasks": len(sel.tasks)}
 	var dependants []string
+	if sel.project != "" {
+		var n int
+		if err := q.QueryRowContext(ctx, `SELECT count(*) FROM sim_attempts WHERE project_id = ?`, sel.project).Scan(&n); err != nil {
+			return nil, nil, err
+		}
+		counts["sim_attempts"] = n
+	}
 	if len(sel.sessions) > 0 {
 		args := anys(sel.sessions)
 		for name, query := range map[string]string{

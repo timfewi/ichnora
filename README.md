@@ -16,6 +16,8 @@ service or direct-database client fallback.
 - Project enrollment and worktree mappings, with collection and automatic
   recall **off by default**. Configuring a workspace does not import it.
 - Explicit claim capture, revisioned task checkpoints and cross-session resume.
+- Problem-specific improvement histories with a prediction recorded before each
+  trial and an observed outcome tied to a fingerprinted evaluation artifact.
 - Bounded search/read responses, evidence references, stale-dependency checks,
   conflicts and explicit history views.
 - Claude Code and Codex transcript adapters, plus a thin OpenCode plugin run by
