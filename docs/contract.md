@@ -32,6 +32,11 @@ other projects or source content.
 
 Every read-family response (`search`, `read`, `evidence`, `resume`,
 `status`) accepts `max_bytes` (default 8192, minimum 1024, maximum 262144).
+Omitting the field or sending zero requests the default. The MCP tool
+`memory_search` advertises these bounds in its input schema. An invalid
+budget sent to that tool produces an MCP tool validation error before the
+bridge contacts the service. Socket clients receive the service error above.
+
 The limit covers the complete serialized UTF-8 response, including envelope,
 provenance, cursor and omissions; `budget.unit` says `UTF-8 bytes`. The result
 skeleton (scope, totals of conflicts, leads, unknown applicability, sources and

@@ -18,6 +18,10 @@ Ichnora is a local memory service for coding agents: one Go executable
 - Collection, automatic recall and historical imports require explicit opt-in.
   Preserve project scope, evidence provenance and the distinction between
   application roles and same-UID isolation.
+- Before the first project memory lookup in a session, or after switching
+  projects or reconnecting the MCP bridge, call `memory_status({})`. Search
+  only if `result.scope` identifies the intended project. Otherwise use the
+  checkout or an explicitly requested source. Omit `max_bytes` for the default.
 - Tests use synthetic fixtures only. Never import real sessions, read native
   transcript directories or put runtime databases, raw sessions, measurements,
   deployment identities or credentials in Git or the Nix store.

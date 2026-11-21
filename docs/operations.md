@@ -164,6 +164,14 @@ directory, not a request's project name. Enroll a project _below_ a workspace
 root, not the workspace root itself. Nested repositories enroll separately;
 map additional worktrees with `enroll PATH --worktree-of PROJECT_ID`.
 
+If the MCP bridge's scope is uncertain, call `memory_status` with `{}` and
+check `result.scope.project`. If `result.scope` is null, read `result.scope_gap`.
+For a missing or mismatched scope, launch the bridge from the intended enrolled
+project or mapped worktree before searching. A separate shell's working
+directory has no effect on a running bridge. For a small search, set `limit`
+and omit `max_bytes` to use the 8192-byte default. Explicit budgets range
+from 1024 through 262144 bytes.
+
 Manual `capture` (JSON on stdin), `task` and `resume TASK_ID` are explicit client
 operations and do not require automatic collection. Their request fields are in
 [Contract](contract.md). To opt into future hook-driven collection:
