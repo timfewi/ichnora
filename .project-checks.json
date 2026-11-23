@@ -1,5 +1,7 @@
 {
-  "version": 1,
+  "version": 3,
+  "warnings": "fail",
+  "environment": { "kind": "nix-devshell" },
   "checks": [
     {
       "name": "format",
