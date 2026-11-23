@@ -40,17 +40,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1792786492,
-        "narHash": "sha256-kdV5X1YuGIDYtMnWO5nqZ1qO4a2Hn//x+cewd8K9vK8=",
+        "lastModified": 1795430714,
+        "narHash": "sha256-W9XWp+a3krub3kQUTywF6cTWpe3ZOUU8fD38Ahb15Ms=",
         "owner": "timfewi",
         "repo": "project-check",
-        "rev": "56962fbd92f992938f39b44b2590adf843ebe757",
+        "rev": "f0a319f3b3cc0b93371bc13f4e684dd2ada2ef73",
         "type": "github"
       },
       "original": {
         "owner": "timfewi",
         "repo": "project-check",
-        "rev": "56962fbd92f992938f39b44b2590adf843ebe757",
+        "rev": "f0a319f3b3cc0b93371bc13f4e684dd2ada2ef73",
         "type": "github"
       }
     },
