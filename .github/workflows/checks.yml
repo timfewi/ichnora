@@ -39,3 +39,20 @@ jobs:
         run: sudo chmod a+rw /dev/kvm
       - name: Start the NixOS service and verify custom sockets and restart
         run: nix build --no-link --no-update-lock-file -L .#checks.x86_64-linux.module-vm
+
+  package-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c # v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build, test and run the ARM64 package
+        run: |
+          nix build --no-update-lock-file -L .#checks.aarch64-linux.package
+          ./result/bin/ichnora version
