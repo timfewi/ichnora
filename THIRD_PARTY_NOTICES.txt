@@ -147,8 +147,12 @@ Pinned production modules
 Go runtime and standard library
 -------------------------------
 
-Go 1.26.7: https://go.googlesource.com/go/+/refs/tags/go1.26.7
+Upstream source: https://go.googlesource.com/go/
 Copyright 2009 The Go Authors.
+
+The Go toolchain used to build the executable supplies its runtime and
+standard library. To see the exact Go version for a binary, run
+`go version -m /path/to/ichnora`.
 
 The compiled executable includes Go runtime and standard-library code under
 Go's BSD-style license, reproduced in LICENSES/Go-BSD-3-Clause.txt. The Go

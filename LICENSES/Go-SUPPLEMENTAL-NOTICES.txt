@@ -1,9 +1,9 @@
-Go 1.26.7 supplemental upstream notices
-======================================
+Go supplemental upstream notices
+================================
 
-The following source excerpts retain the upstream notice text verbatim,
-including comment markers where present. They supplement Go-BSD-3-Clause.txt
-and Go-PATENTS.txt; they do not replace or relicense those components.
+The following notices were transcribed from the Go 1.26.7 source tree.
+They retain the upstream text verbatim, including comment markers where
+present, and supplement Go-BSD-3-Clause.txt and Go-PATENTS.txt.
 
 Go runtime: src/runtime/memmove_amd64.s (lines 1-24)
 ------------------------------------------------------------------------
