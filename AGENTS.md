@@ -35,6 +35,8 @@ Ichnora is a local memory service for coding agents: one Go executable
   `nix hash path vendor` in a scratch copy. Update
   [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) and retained upstream
   licenses when dependency licensing changes.
+- Raise `version` in [flake.nix](flake.nix) with every change: the patch level
+  for fixes and documentation, the minor level for new behavior.
 - Git mutations, publication, installation, host activation, collection and
   real-session import must follow the operator's authorization for the task.
   A public source repository does not authorize access to private runtime data.
