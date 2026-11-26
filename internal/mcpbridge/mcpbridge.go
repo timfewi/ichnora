@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -29,18 +30,72 @@ type TaskInput struct {
 	MaxBytes int `json:"max_bytes,omitempty" jsonschema:"response byte budget for action resume"`
 }
 
-func searchSchema() *jsonschema.Schema {
-	schema, err := jsonschema.For[contract.SearchRequest](nil)
+// schema infers a tool's input schema from its request type.
+func schema[T any]() *jsonschema.Schema {
+	s, err := jsonschema.For[T](nil)
 	if err != nil {
 		panic(err)
 	}
-	budget := schema.Properties["max_bytes"]
+	return s
+}
+
+// allow advertises the values the service accepts for a string.
+func allow(s *jsonschema.Schema, values ...string) {
+	for _, value := range values {
+		s.Enum = append(s.Enum, value)
+	}
+}
+
+// enum does the same for a named property. An optional property also accepts
+// the empty string, which the service reads as omitted.
+func enum(parent *jsonschema.Schema, name string, values ...string) {
+	allow(parent.Properties[name], values...)
+	if !slices.Contains(parent.Required, name) {
+		allow(parent.Properties[name], "")
+	}
+}
+
+func searchSchema() *jsonschema.Schema {
+	s := schema[contract.SearchRequest]()
+	enum(s, "view", "working", "history", "all")
+	allow(s.Properties["kinds"].Items, "observation", "decision", "summary", "note", "source")
+	budget := s.Properties["max_bytes"]
 	budget.Default = json.RawMessage(strconv.Itoa(contract.DefaultBudget))
 	budget.AnyOf = []*jsonschema.Schema{
 		{Minimum: new(float64(contract.MinBudget)), Maximum: new(float64(contract.MaxBudget))},
 		{Enum: []any{0}},
 	}
-	return schema
+	return s
+}
+
+func captureSchema() *jsonschema.Schema {
+	s := schema[contract.CaptureRequest]()
+	claim := s.Properties["claims"].Items
+	enum(claim, "kind", "observation", "decision", "summary", "note")
+	enum(claim, "status", "observed", "inferred")
+	enum(claim.Properties["support"].Items, "kind", "file", "ast", "tabula", "event", "turn", "claim", "checkpoint", "check", "external")
+	enum(claim.Properties["depends"].Items, "kind", "file", "ast", "tabula", "revision", "environment")
+	return s
+}
+
+func updateSchema() *jsonschema.Schema {
+	s := schema[contract.UpdateRequest]()
+	enum(s, "status", "disputed", "invalidated")
+	return s
+}
+
+func taskSchema() *jsonschema.Schema {
+	s := schema[TaskInput]()
+	enum(s, "action", "list", "create", "checkpoint", "transition", "resume")
+	enum(s, "to", "active", "blocked", "completed", "cancelled", "reopened")
+	enum(s.Properties["checkpoint"].Properties["verification"].Items, "outcome", "passed", "failed", "skipped")
+	return s
+}
+
+func simSchema() *jsonschema.Schema {
+	s := schema[contract.SimRequest]()
+	enum(s, "action", "history", "propose", "observe")
+	return s
 }
 
 // Server builds the MCP server. hint supplies the harness session, if known.
@@ -70,16 +125,16 @@ func Server(version string, client server.Client, hint func() *contract.SessionH
 		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.EvidenceRequest) (*mcp.CallToolResult, any, error) {
 			return call(ctx, "evidence", in)
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "memory_capture", Description: "Record decisions, observations, notes or summaries with support references, dependencies and supersession links."},
+	mcp.AddTool(s, &mcp.Tool{Name: "memory_capture", InputSchema: captureSchema(), Description: "Record decisions, observations, notes or summaries. Give each claim depends, or a decision an expires_at, so it can be validated later; otherwise it stays an unvalidated lead."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.CaptureRequest) (*mcp.CallToolResult, any, error) {
 			in.Session = hint()
 			return call(ctx, "capture", in)
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "memory_update", Description: "Dispute or invalidate a claim, or invalidate a source event or turn; dependants are recomputed."},
+	mcp.AddTool(s, &mcp.Tool{Name: "memory_update", InputSchema: updateSchema(), Description: "Dispute or invalidate a claim, or invalidate a source event or turn; dependants are recomputed."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.UpdateRequest) (*mcp.CallToolResult, any, error) {
 			return call(ctx, "update", in)
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "memory_task", Description: "Task actions: list, create, checkpoint (expected_revision required), transition, or resume (builds the selected task's working context)."},
+	mcp.AddTool(s, &mcp.Tool{Name: "memory_task", InputSchema: taskSchema(), Description: "Task actions: list, create (returns revision 1), checkpoint and transition (both need the current expected_revision), or resume (builds the selected task's working context)."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TaskInput) (*mcp.CallToolResult, any, error) {
 			if in.Action == "resume" {
 				return call(ctx, "resume", contract.ResumeRequest{TaskID: in.TaskID, MaxBytes: in.MaxBytes, Session: hint()})
@@ -87,7 +142,7 @@ func Server(version string, client server.Client, hint func() *contract.SessionH
 			in.Session = hint()
 			return call(ctx, "task", in.TaskRequest)
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "memory_sim", Description: "Read a problem's attempts with history. Before a trial, use propose with an attempt key, cause, change, prediction and context. After the trial, use observe with the same keys, the outcome and a project-relative evidence file."},
+	mcp.AddTool(s, &mcp.Tool{Name: "memory_sim", InputSchema: simSchema(), Description: "Read a problem's attempts with history. Before a trial, use propose with an attempt key, cause, change, prediction and context. After the trial, use observe with the same keys, the outcome and a project-relative evidence file."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in contract.SimRequest) (*mcp.CallToolResult, any, error) {
 			return call(ctx, "sim", in)
 		})

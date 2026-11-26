@@ -13,13 +13,13 @@ type SessionHint struct {
 // Ref is a support reference or an applicability dependency.
 type Ref struct {
 	Kind        string `json:"kind"`
-	Ref         string `json:"ref,omitempty"`
-	Path        string `json:"path,omitempty"`
-	SHA256      string `json:"sha256,omitempty"`
+	Ref         string `json:"ref,omitempty" jsonschema:"record ID for event, turn, claim or checkpoint; name for check or external"`
+	Path        string `json:"path,omitempty" jsonschema:"project-relative file for file, ast or tabula"`
+	SHA256      string `json:"sha256,omitempty" jsonschema:"file digest; defaults to the current one"`
 	Digest      string `json:"digest,omitempty"`
 	Locator     string `json:"locator,omitempty"`
-	Value       string `json:"value,omitempty"`
-	Epoch       string `json:"epoch,omitempty"`
+	Value       string `json:"value,omitempty" jsonschema:"commit for revision; defaults to the current HEAD"`
+	Epoch       string `json:"epoch,omitempty" jsonschema:"environment epoch from status; defaults to the current one"`
 	Card        string `json:"card,omitempty"`
 	Section     string `json:"section,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
@@ -94,18 +94,18 @@ type BudgetInfo struct {
 
 // SearchRequest is the `search` operation.
 type SearchRequest struct {
-	Query     string       `json:"query"`
-	View      string       `json:"view,omitempty"`
+	Query     string       `json:"query" jsonschema:"words to match; empty lists the project's claims"`
+	View      string       `json:"view,omitempty" jsonschema:"working (default) holds validated claims and leads; history adds replaced, stale and expired ones"`
 	TaskID    string       `json:"task_id,omitempty"`
 	SessionID string       `json:"session_id,omitempty"`
 	Kinds     []string     `json:"kinds,omitempty"`
-	Files     []string     `json:"files,omitempty"`
-	Since     string       `json:"since,omitempty"`
-	Until     string       `json:"until,omitempty"`
-	Limit     int          `json:"limit,omitempty"`
-	Cursor    string       `json:"cursor,omitempty"`
+	Files     []string     `json:"files,omitempty" jsonschema:"project-relative paths that rank related records first"`
+	Since     string       `json:"since,omitempty" jsonschema:"RFC 3339"`
+	Until     string       `json:"until,omitempty" jsonschema:"RFC 3339"`
+	Limit     int          `json:"limit,omitempty" jsonschema:"1 to 50, default 10"`
+	Cursor    string       `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page"`
 	MaxBytes  int          `json:"max_bytes,omitempty"`
-	Session   *SessionHint `json:"session,omitempty"`
+	Session   *SessionHint `json:"session,omitempty" jsonschema:"attribution hint set by the client; omit"`
 }
 
 // SearchResult is the `search` result.
@@ -176,8 +176,8 @@ func (r *ReadResult) Trim() bool {
 
 // EvidenceRequest is the `evidence` operation.
 type EvidenceRequest struct {
-	ID           string `json:"id"`
-	ExcerptLines int    `json:"excerpt_lines,omitempty"`
+	ID           string `json:"id" jsonschema:"claim ID"`
+	ExcerptLines int    `json:"excerpt_lines,omitempty" jsonschema:"up to 40"`
 	MaxBytes     int    `json:"max_bytes,omitempty"`
 }
 
@@ -231,26 +231,26 @@ func (r *EvidenceResult) Trim() bool {
 // ClaimInput is one claim to capture.
 type ClaimInput struct {
 	Kind         string   `json:"kind"`
-	Title        string   `json:"title"`
+	Title        string   `json:"title" jsonschema:"the claim in one line, up to 200 bytes"`
 	Body         string   `json:"body,omitempty"`
-	Rationale    string   `json:"rationale,omitempty"`
-	Alternatives []string `json:"alternatives,omitempty"`
-	TaskID       string   `json:"task_id,omitempty"`
+	Rationale    string   `json:"rationale,omitempty" jsonschema:"why, for a decision"`
+	Alternatives []string `json:"alternatives,omitempty" jsonschema:"rejected options"`
+	TaskID       string   `json:"task_id,omitempty" jsonschema:"task whose resume should include this claim"`
 	Status       string   `json:"status,omitempty"`
-	Support      []Ref    `json:"support,omitempty"`
-	Depends      []Ref    `json:"depends,omitempty"`
-	Supersedes   []string `json:"supersedes,omitempty"`
-	Contradicts  []string `json:"contradicts,omitempty"`
-	DerivedFrom  []string `json:"derived_from,omitempty"`
+	Support      []Ref    `json:"support,omitempty" jsonschema:"evidence the claim rests on"`
+	Depends      []Ref    `json:"depends,omitempty" jsonschema:"what must stay unchanged for the claim to apply; a claim without it is an unvalidated lead unless a decision sets expires_at"`
+	Supersedes   []string `json:"supersedes,omitempty" jsonschema:"IDs of claims this one replaces"`
+	Contradicts  []string `json:"contradicts,omitempty" jsonschema:"IDs of claims this one conflicts with"`
+	DerivedFrom  []string `json:"derived_from,omitempty" jsonschema:"source claim IDs of a summary"`
 	Transform    string   `json:"transform,omitempty"`
-	EventTime    string   `json:"event_time,omitempty"`
-	ExpiresAt    string   `json:"expires_at,omitempty"`
+	EventTime    string   `json:"event_time,omitempty" jsonschema:"RFC 3339 time of the observation"`
+	ExpiresAt    string   `json:"expires_at,omitempty" jsonschema:"RFC 3339; keeps a decision without depends valid until then"`
 }
 
 // CaptureRequest is the `capture` operation.
 type CaptureRequest struct {
 	Claims  []ClaimInput `json:"claims"`
-	Session *SessionHint `json:"session,omitempty"`
+	Session *SessionHint `json:"session,omitempty" jsonschema:"attribution hint set by the client; omit"`
 }
 
 // CaptureResult lists the new claim IDs in request order.
@@ -261,9 +261,9 @@ type CaptureResult struct {
 
 // UpdateRequest is the `update` operation (dispute or invalidate a claim).
 type UpdateRequest struct {
-	ID     string `json:"id"`
+	ID     string `json:"id" jsonschema:"claim ID, or an event or turn ID to invalidate a source"`
 	Status string `json:"status"`
-	Reason string `json:"reason"`
+	Reason string `json:"reason" jsonschema:"required, up to 500 bytes"`
 }
 
 // UpdateResult reports the new status and recomputed dependants.
@@ -275,7 +275,7 @@ type UpdateResult struct {
 
 // Verification records a check run with its exact tested inputs.
 type Verification struct {
-	Check   string            `json:"check"`
+	Check   string            `json:"check" jsonschema:"command or check name"`
 	Outcome string            `json:"outcome"`
 	Inputs  VerificationInput `json:"inputs"`
 	At      string            `json:"at,omitempty"`
@@ -283,9 +283,9 @@ type Verification struct {
 
 // VerificationInput identifies what a check ran against.
 type VerificationInput struct {
-	Revision string            `json:"revision,omitempty"`
-	Files    map[string]string `json:"files,omitempty"`
-	Epoch    string            `json:"epoch,omitempty"`
+	Revision string            `json:"revision,omitempty" jsonschema:"commit the check ran against"`
+	Files    map[string]string `json:"files,omitempty" jsonschema:"project-relative path to the SHA-256 the check ran against"`
+	Epoch    string            `json:"epoch,omitempty" jsonschema:"environment epoch the check ran against"`
 }
 
 // Checkpoint holds the structured state of a task.
@@ -296,21 +296,21 @@ type Checkpoint struct {
 	Remaining    []string       `json:"remaining,omitempty"`
 	Blockers     []string       `json:"blockers,omitempty"`
 	NextAction   string         `json:"next_action,omitempty"`
-	Decisions    []string       `json:"decisions,omitempty"`
-	Verification []Verification `json:"verification,omitempty"`
+	Decisions    []string       `json:"decisions,omitempty" jsonschema:"claim IDs"`
+	Verification []Verification `json:"verification,omitempty" jsonschema:"check results with the inputs they ran against"`
 }
 
 // TaskRequest is the `task` operation.
 type TaskRequest struct {
 	Action           string       `json:"action"`
-	TaskID           string       `json:"task_id,omitempty"`
-	Title            string       `json:"title,omitempty"`
-	ProgressRef      string       `json:"progress_ref,omitempty"`
-	ExpectedRevision int64        `json:"expected_revision,omitempty"`
-	To               string       `json:"to,omitempty"`
-	Reason           string       `json:"reason,omitempty"`
-	Checkpoint       *Checkpoint  `json:"checkpoint,omitempty"`
-	Session          *SessionHint `json:"session,omitempty"`
+	TaskID           string       `json:"task_id,omitempty" jsonschema:"required except for create and list"`
+	Title            string       `json:"title,omitempty" jsonschema:"create"`
+	ProgressRef      string       `json:"progress_ref,omitempty" jsonschema:"create: project-relative progress file that stays authoritative"`
+	ExpectedRevision int64        `json:"expected_revision,omitempty" jsonschema:"checkpoint and transition: the task's current revision"`
+	To               string       `json:"to,omitempty" jsonschema:"transition: the new state"`
+	Reason           string       `json:"reason,omitempty" jsonschema:"transition: required"`
+	Checkpoint       *Checkpoint  `json:"checkpoint,omitempty" jsonschema:"create and checkpoint: given lists and non-empty strings replace the stored ones"`
+	Session          *SessionHint `json:"session,omitempty" jsonschema:"attribution hint set by the client; omit"`
 }
 
 // Task is a task summary.

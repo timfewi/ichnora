@@ -1,21 +1,21 @@
 package contract
 
 type SimProposal struct {
-	Cause      string `json:"cause,omitempty"`
-	Change     string `json:"change,omitempty"`
-	Prediction string `json:"prediction,omitempty"`
-	Context    string `json:"context,omitempty"`
+	Cause      string `json:"cause,omitempty" jsonschema:"propose: suspected root cause"`
+	Change     string `json:"change,omitempty" jsonschema:"propose: the intervention"`
+	Prediction string `json:"prediction,omitempty" jsonschema:"propose: expected result, recorded before the trial"`
+	Context    string `json:"context,omitempty" jsonschema:"propose: how the trial is evaluated"`
 }
 
 type SimRequest struct {
 	Action  string `json:"action"`
-	Problem string `json:"problem"`
-	Attempt string `json:"attempt,omitempty"`
+	Problem string `json:"problem" jsonschema:"stable key of the recurring problem"`
+	Attempt string `json:"attempt,omitempty" jsonschema:"propose and observe: a new key for each trial"`
 	SimProposal
-	Outcome  string `json:"outcome,omitempty"`
-	Evidence string `json:"evidence,omitempty"`
-	Offset   int    `json:"offset,omitempty"`
-	Limit    int    `json:"limit,omitempty"`
+	Outcome  string `json:"outcome,omitempty" jsonschema:"observe: what happened"`
+	Evidence string `json:"evidence,omitempty" jsonschema:"observe: project-relative result file"`
+	Offset   int    `json:"offset,omitempty" jsonschema:"history: next_offset of the previous page"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"history: 1 to 50, default 10"`
 	MaxBytes int    `json:"max_bytes,omitempty"`
 }
 
