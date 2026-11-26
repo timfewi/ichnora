@@ -223,6 +223,15 @@ working directory inside the enrolled project. These are command/argument values
 not a universal harness configuration schema. No MCP server registration is
 performed by the package or service module.
 
+The tools say how to call them, not when. The source tree carries one agent
+skill for that, [`skills/ichnora-memory`](../skills/ichnora-memory/SKILL.md):
+check scope and open tasks first, give each claim the files or expiry that keep
+it verifiable, checkpoint work that outlasts a session and record a prediction
+before repeating a fix. Link the directory into the harness's skill directory,
+for example `~/.claude/skills/ichnora-memory`. Flake consumers get its path as
+`lib.skills.ichnora-memory`. The package and the service module install no
+skill.
+
 For Claude Code and Codex command hooks, register
 `ichnora hook claude --no-context` or `ichnora hook codex --no-context` for the
 supported events listed in [Adapters](adapters.md#hook-registration). Use an

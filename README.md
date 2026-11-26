@@ -23,6 +23,9 @@ service or direct-database client fallback.
 - Claude Code and Codex transcript adapters, plus a thin OpenCode plugin run by
   OpenCode's own runtime. See the [interface evidence and limits](docs/adapters.md);
   fixture coverage is not a claim of end-to-end live harness compatibility.
+- MCP tools whose schemas name the accepted values, and an
+  [agent skill](skills/ichnora-memory/SKILL.md) for when to recall, record
+  and checkpoint.
 - Owner-controlled sharing, preview/confirmation for historical import and
   retention, consistent backups and offline restore.
 

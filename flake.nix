@@ -42,6 +42,9 @@
 
       nixosModules.default = import ./nix/module.nix { inherit self; };
 
+      # Skill name -> directory, for harness profiles that link agent skills.
+      lib.skills.ichnora-memory = ./skills/ichnora-memory;
+
       checks = forAllSystems (
         system:
         {
