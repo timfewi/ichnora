@@ -57,7 +57,7 @@ func enum(parent *jsonschema.Schema, name string, values ...string) {
 
 func searchSchema() *jsonschema.Schema {
 	s := schema[contract.SearchRequest]()
-	enum(s, "view", "working", "history", "all")
+	enum(s, "view", "working", "history", "all", "review")
 	allow(s.Properties["kinds"].Items, "observation", "decision", "summary", "note", "source")
 	budget := s.Properties["max_bytes"]
 	budget.Default = json.RawMessage(strconv.Itoa(contract.DefaultBudget))
@@ -73,8 +73,8 @@ func captureSchema() *jsonschema.Schema {
 	claim := s.Properties["claims"].Items
 	enum(claim, "kind", "observation", "decision", "summary", "note")
 	enum(claim, "status", "observed", "inferred")
-	enum(claim.Properties["support"].Items, "kind", "file", "ast", "tabula", "event", "turn", "claim", "checkpoint", "check", "external")
-	enum(claim.Properties["depends"].Items, "kind", "file", "ast", "tabula", "revision", "environment")
+	enum(claim.Properties["support"].Items, "kind", "file", "ast", "json_field", "tabula", "event", "turn", "claim", "checkpoint", "attempt", "check", "external")
+	enum(claim.Properties["depends"].Items, "kind", "file", "ast", "json_field", "tabula", "revision", "environment")
 	return s
 }
 

@@ -3,9 +3,11 @@ package core
 import (
 	"context"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/timfewi/ichnora/internal/contract"
+	"github.com/timfewi/ichnora/internal/ingest"
 )
 
 // classify places a claim into a retrieval group.
@@ -28,7 +30,10 @@ func (c *Core) rankClaim(ctx context.Context, q querier, ev *evaluator, s Scope,
 	if err != nil {
 		return ranked{}, err
 	}
-	v := ev.claim(cl.Kind, cl.Worktree, cl.Expires, depsOf(refs))
+	v, err := ev.effective(q, s, cl, refs, 0)
+	if err != nil {
+		return ranked{}, err
+	}
 	conflicts, err := conflictsOf(ctx, q, s, cl.ID)
 	if err != nil {
 		return ranked{}, err
@@ -63,6 +68,8 @@ func rankEvaluatedClaim(cl claimRow, req contract.SearchRequest, terms []string,
 			ValidatedAt: cl.Validated, Support: support, LostSupport: lost, Derivation: cl.Transform}}
 	if cl.Project != s.ProjectID {
 		item.Provenance.SharedFrom = "shared claim from another project"
+	} else if cl.Worktree != s.Worktree {
+		item.Provenance.SourceWorktree = cl.Worktree
 	}
 	score := 0.0
 	if req.TaskID != "" && cl.Task == req.TaskID {
@@ -71,7 +78,7 @@ func rankEvaluatedClaim(cl claimRow, req contract.SearchRequest, terms []string,
 	}
 	for _, f := range req.Files {
 		for _, r := range refs {
-			if (r.Kind == "file" || r.Kind == "ast") && r.Detail.Path == f {
+			if (r.Kind == "file" || r.Kind == "ast" || r.Kind == "json_field") && r.Detail.Path == f {
 				score += 6
 				item.Reasons = appendOnce(item.Reasons, "file match: "+f)
 			}
@@ -96,6 +103,11 @@ func rankEvaluatedClaim(cl claimRow, req contract.SearchRequest, terms []string,
 		days := now.Sub(t).Hours() / 24
 		score += 1 / (1 + math.Max(days, 0)/30)
 	}
-	return ranked{item: item, group: group, score: score, created: cl.Created, lineage: cl.Lineage,
+	var duplicateKey string
+	if (group == "working" || group == "lead") && !strings.HasPrefix(cl.Lineage, "self:") {
+		statement := []string{cl.Lineage, cl.Project, cl.Worktree, cl.Kind, cl.Title, cl.Body, cl.Rationale, cl.Task, cl.Expires, cl.EventTime, cl.Status, v.state, mustJSON(depsOf(refs))}
+		duplicateKey = ingest.Digest([]byte(mustJSON(statement)))
+	}
+	return ranked{item: item, group: group, score: score, created: cl.Created, duplicateKey: duplicateKey,
 		unknown: v.state == ApUnknown || v.state == ApUnchecked}
 }

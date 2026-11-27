@@ -133,11 +133,19 @@ func (c *Core) prepareRef(s Scope, role string, r contract.Ref) (preparedRef, er
 		}
 	}
 	switch {
+	case role == "support" && r.Kind == "attempt":
+		problem, attempt, _ := strings.Cut(r.Ref, "/")
+		if !simKey.MatchString(problem) || !simKey.MatchString(attempt) {
+			return pr, contract.Errf(contract.CodeInvalid, "attempt support needs problem/attempt")
+		}
+		pr.ref = r.Ref
 	case role == "support" && (r.Kind == "event" || r.Kind == "turn" || r.Kind == "claim" || r.Kind == "checkpoint"):
 		if r.Ref == "" {
 			return pr, contract.Errf(contract.CodeInvalid, "%s reference needs ref", r.Kind)
 		}
 		pr.ref = r.Ref
+	case r.Kind == "json_field":
+		return c.prepareField(s.Root, role, r)
 	case r.Kind == "file" || r.Kind == "ast":
 		abs, err := c.pol.Source(s.Root, r.Path)
 		if err != nil {
@@ -323,6 +331,20 @@ func bindRef(ctx context.Context, tx *sql.Tx, s Scope, pr *preparedRef) error {
 	var project sql.NullString
 	var flags, invalid, session, harness string
 	switch pr.kind {
+	case "attempt":
+		problem, attempt, _ := strings.Cut(pr.ref, "/")
+		var path, digest string
+		err := tx.QueryRowContext(ctx, `SELECT evidence, evidence_sha256 FROM sim_attempts
+			WHERE project_id = ? AND problem = ? AND attempt = ? AND observed_at != ''`, s.ProjectID, problem, attempt).Scan(&path, &digest)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errRef
+		}
+		if err != nil {
+			return err
+		}
+		pr.detail = contract.Ref{Kind: "attempt", Ref: pr.ref, Path: path, SHA256: digest}
+		pr.root = "file:" + path + "@" + digest
+		return nil
 	case "event":
 		if err := tx.QueryRowContext(ctx, `SELECT project_id, session_id, flags, invalid FROM events WHERE id = ?`, pr.ref).Scan(&project, &session, &flags, &invalid); err != nil {
 			return errRef

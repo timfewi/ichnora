@@ -31,6 +31,12 @@ Without either, the claim stays an unvalidated lead. Add `rationale` and
 `alternatives` to a decision, `support` for its evidence and `task_id` for
 task work.
 
+For a top-level JSON setting, a `json_field` dependency checks a precise
+value, e.g. `{"kind":"json_field","path":"settings.json","field":"port","value":"9200"}`.
+Use `memory_search` with `view: "review"` in the consuming worktree. Read the
+reason and the evidence. Inspect directly affected claims with `derived_from`
+and `view: "all"`.
+
 Replace a claim by capturing its successor with the old ID in `supersedes`.
 Use `memory_update` with `disputed` or `invalidated` when a claim is wrong and
 has no successor. Repeating a claim does not renew it.
@@ -50,4 +56,6 @@ the task with `transition`.
 For a fault that returns, use `memory_sim` with a stable `problem` key. Read
 `history` first. `propose` the cause, change and prediction before the trial.
 `observe` the outcome afterwards with a project-relative result file, also
-when the trial failed.
+when the trial failed. When capturing a reusable rule, cite completed trials
+using `{"kind":"attempt","ref":"problem/attempt"}` in `support`. Keep the
+rule’s scope, counterexamples and current dependencies with it.

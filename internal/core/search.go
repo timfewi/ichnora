@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"regexp"
 	"sort"
 	"strings"
@@ -87,12 +88,12 @@ func ftsQuery(q string) ([]string, string) {
 }
 
 type ranked struct {
-	item    contract.Item
-	group   string
-	score   float64
-	created string
-	lineage string
-	unknown bool
+	item         contract.Item
+	group        string
+	score        float64
+	created      string
+	duplicateKey string
+	unknown      bool
 }
 
 func coverage(terms []string, text string) (int, bool) {
@@ -140,9 +141,9 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	switch req.View {
 	case "":
 		req.View = "working"
-	case "working", "history", "all":
+	case "working", "history", "all", "review":
 	default:
-		return nil, 0, contract.Errf(contract.CodeInvalid, "view must be working, history or all")
+		return nil, 0, contract.Errf(contract.CodeInvalid, "view must be working, history, all or review")
 	}
 	if req.Limit == 0 {
 		req.Limit = 10
@@ -163,10 +164,6 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	if err != nil {
 		return nil, 0, err
 	}
-	ev, err := c.evaluator(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
 	db := c.store.Read()
 	// One read snapshot keeps every candidate batch and the cursor generation
 	// consistent while concurrent writers continue through WAL.
@@ -175,6 +172,10 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 		return nil, 0, err
 	}
 	defer snapshot.Rollback()
+	ev, err := c.evaluator(ctx, snapshot)
+	if err != nil {
+		return nil, 0, err
+	}
 	// Enrollment and sharing must come from the same snapshot as the data.
 	s, ok, err := c.resolvePath(ctx, snapshot, caller.Cwd)
 	if err != nil {
@@ -182,6 +183,13 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	}
 	if !ok {
 		return nil, 0, errNoScope
+	}
+	if req.DerivedFrom != "" {
+		if _, visible, err := inScopeClaim(ctx, snapshot, s, req.DerivedFrom); err != nil {
+			return nil, 0, err
+		} else if !visible {
+			return nil, 0, errRef
+		}
 	}
 	gen, err := c.scopeGeneration(ctx, snapshot, s)
 	if err != nil {
@@ -223,7 +231,7 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 	if err != nil {
 		return nil, 0, err
 	}
-	if req.Query != "" && wantKind("source") && req.View != "history" {
+	if req.Query != "" && wantKind("source") && req.View != "history" && req.View != "review" && req.DerivedFrom == "" {
 		turns, err := turnCandidates(ctx, snapshot, s, req, match, since, until, terms)
 		if err != nil {
 			return nil, 0, err
@@ -234,7 +242,7 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 		all = append(all, turns...)
 	}
 
-	// Separate by group, then collapse duplicate lineages and filter the view.
+	// Conflicts take priority even under a small response budget.
 	sort.SliceStable(all, func(i, j int) bool {
 		a, b := all[i], all[j]
 		if groupOrder[a.group] != groupOrder[b.group] {
@@ -248,16 +256,13 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 		}
 		return a.item.ID < b.item.ID
 	})
-	seenLineage := map[string]int{}
+	seenStatements := map[string]int{}
 	var visible []ranked
 	for _, r := range all {
-		if r.lineage != "" && !strings.HasPrefix(r.lineage, "self:") {
-			if idx, dup := seenLineage[r.group+r.lineage]; dup {
-				res.Omitted.Duplicates++
-				visible[idx].item.Reasons = appendOnce(visible[idx].item.Reasons, "duplicate lineage collapsed")
-				continue
-			}
+		if req.View == "review" && (r.group == "working" || r.item.Status == "invalidated" || r.item.Status == "superseded") {
+			continue
 		}
+
 		switch r.group {
 		case "history":
 			if r.item.Status == "superseded" || r.item.Status == "invalidated" {
@@ -274,8 +279,13 @@ func (c *Core) Search(ctx context.Context, caller Caller, req contract.SearchReq
 				continue
 			}
 		}
-		if r.lineage != "" {
-			seenLineage[r.group+r.lineage] = len(visible)
+		if r.duplicateKey != "" && req.View != "review" {
+			if idx, dup := seenStatements[r.duplicateKey]; dup {
+				res.Omitted.Duplicates++
+				visible[idx].item.Reasons = appendOnce(visible[idx].item.Reasons, "duplicate statement with the same evidence")
+				continue
+			}
+			seenStatements[r.duplicateKey] = len(visible)
 		}
 		visible = append(visible, r)
 	}
@@ -389,15 +399,22 @@ func (c *Core) Read(ctx context.Context, caller Caller, req contract.ReadRequest
 	if len(req.IDs) == 0 || len(req.IDs) > 20 {
 		return nil, 0, contract.Errf(contract.CodeInvalid, "read between 1 and 20 ids")
 	}
-	s, err := c.scope(ctx, caller)
+	db, err := c.store.Read().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}
-	ev, err := c.evaluator(ctx)
+	defer db.Rollback()
+	s, ok, err := c.resolvePath(ctx, db, caller.Cwd)
 	if err != nil {
 		return nil, 0, err
 	}
-	db := c.store.Read()
+	if !ok {
+		return nil, 0, errNoScope
+	}
+	ev, err := c.evaluator(ctx, db)
+	if err != nil {
+		return nil, 0, err
+	}
 	res := &contract.ReadResult{Records: []contract.Record{}, Missing: []string{}, Complete: true, Notice: Notice,
 		Budget: contract.BudgetInfo{MaxBytes: budget, Unit: contract.BudgetUnit}}
 	for _, id := range req.IDs {
@@ -414,7 +431,7 @@ func (c *Core) Read(ctx context.Context, caller Caller, req contract.ReadRequest
 	return res, budget, nil
 }
 
-func (c *Core) readOne(ctx context.Context, db *sql.DB, ev *evaluator, s Scope, id string) (contract.Record, bool, error) {
+func (c *Core) readOne(ctx context.Context, db querier, ev *evaluator, s Scope, id string) (contract.Record, bool, error) {
 	if len(id) > 64 {
 		return contract.Record{}, false, nil
 	}
@@ -431,7 +448,10 @@ func (c *Core) readOne(ctx context.Context, db *sql.DB, ev *evaluator, s Scope, 
 		if err != nil {
 			return contract.Record{}, false, err
 		}
-		v := ev.claim(cl.Kind, cl.Worktree, cl.Expires, depsOf(refs))
+		v, err := ev.effective(db, s, cl, refs, 0)
+		if err != nil {
+			return contract.Record{}, false, err
+		}
 		conflicts, err := conflictsOf(ctx, db, s, id)
 		if err != nil {
 			return contract.Record{}, false, err
@@ -461,6 +481,8 @@ func (c *Core) readOne(ctx context.Context, db *sql.DB, ev *evaluator, s Scope, 
 				"validated_at": cl.Validated, "expires_at": cl.Expires}}
 		if cl.Project != s.ProjectID {
 			data["shared_from"] = "another project"
+		} else if cl.Worktree != s.Worktree {
+			data["source_worktree"] = cl.Worktree
 		}
 		return contract.Record{ID: id, Type: "claim", Data: raw(data), Status: cl.Status, Applicability: v.state,
 			Reasons: firstN(v.reasons, 8)}, true, nil
@@ -570,11 +592,18 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 	if req.ExcerptLines < 1 || req.ExcerptLines > 40 {
 		return nil, 0, contract.Errf(contract.CodeInvalid, "excerpt_lines must be 1-40")
 	}
-	s, err := c.scope(ctx, caller)
+	db, err := c.store.Read().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, 0, err
 	}
-	db := c.store.Read()
+	defer db.Rollback()
+	s, ok, err := c.resolvePath(ctx, db, caller.Cwd)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !ok {
+		return nil, 0, errNoScope
+	}
 	if _, ok, err := inScopeClaim(ctx, db, s, req.ID); err != nil {
 		return nil, 0, err
 	} else if !ok {
@@ -588,13 +617,20 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 	if err != nil {
 		return nil, 0, err
 	}
-	ev, err := c.evaluator(ctx)
+	ev, err := c.evaluator(ctx, db)
 	if err != nil {
 		return nil, 0, err
 	}
-	v := ev.claim(cl.Kind, cl.Worktree, cl.Expires, depsOf(refs))
+	v, err := ev.effective(db, s, cl, refs, 0)
+	if err != nil {
+		return nil, 0, err
+	}
 	res := &contract.EvidenceResult{ID: req.ID, Status: cl.Status, Applicability: v.state, Checks: []contract.SupportCheck{},
 		Gaps: []string{}, Complete: true, Notice: Notice, Budget: contract.BudgetInfo{MaxBytes: budget, Unit: contract.BudgetUnit}}
+	res.Reasons = firstN(v.reasons, 8)
+	if cl.Project == s.ProjectID && cl.Worktree != s.Worktree {
+		res.SourceWorktree = cl.Worktree
+	}
 	root := ev.roots[cl.Worktree]
 	// Sharing a claim shares its statement and validation, not the origin
 	// project's source text.
@@ -608,6 +644,22 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 			res.Gaps = append(res.Gaps, r.Kind+" "+r.Ref+": "+r.Lost)
 		}
 		switch r.Kind {
+		case "attempt":
+			chk.Validation = "observed attempt; historical evidence"
+			if !shared {
+				problem, attempt, _ := strings.Cut(r.Ref, "/")
+				var prediction, outcome string
+				err := db.QueryRowContext(ctx, `SELECT prediction, outcome FROM sim_attempts
+					WHERE project_id = ? AND problem = ? AND attempt = ? AND observed_at != ''`, cl.Project, problem, attempt).Scan(&prediction, &outcome)
+				if errors.Is(err, sql.ErrNoRows) {
+					chk.Validation = "missing observed attempt"
+					res.Gaps = append(res.Gaps, chk.Validation)
+				} else if err != nil {
+					return nil, 0, err
+				} else {
+					chk.Excerpt = raw(map[string]string{"prediction": prediction, "outcome": outcome})
+				}
+			}
 		case "event", "turn":
 			table := map[string]string{"event": "events", "turn": "turns"}[r.Kind]
 			var text, invalid string
@@ -626,15 +678,20 @@ func (c *Core) Evidence(ctx context.Context, caller Caller, req contract.Evidenc
 				}
 			}
 		case "claim":
-			var status string
-			if err := db.QueryRowContext(ctx, `SELECT status FROM claims WHERE id = ?`, r.Ref).Scan(&status); err != nil {
-				chk.Validation = "missing: source claim deleted"
-			} else {
-				chk.Validation = "source claim " + status
+			sv, err := ev.source(db, s, r.Ref, 1)
+			if err != nil {
+				return nil, 0, err
+			}
+			chk.Validation = "source applicability: " + sv.state
+			if !shared && len(sv.reasons) > 0 {
+				chk.Validation += " (" + sv.reasons[0] + ")"
+			}
+			if r.State == "lost" {
+				chk.Validation = r.Lost
 			}
 		case "file", "ast":
 			c.fileEvidence(ctx, ev, root, r, req.ExcerptLines, !shared, &chk, res)
-		case "revision", "environment", "tabula":
+		case "json_field", "revision", "environment", "tabula":
 			dv := verdict{state: ApCurrent}
 			ev.dep(&dv, root, r.Detail)
 			chk.Validation = dv.state + ": " + strings.Join(dv.reasons, "; ")

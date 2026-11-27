@@ -121,7 +121,8 @@ the fetch size cannot hide older decisions or conflicts. A read snapshot keeps
 the enrollment, traversed records and cursor generation consistent. Cursors also
 bind the ordered visible record identities, so a file edit, environment change
 or expiry cannot silently shift an offset between pages. Dependency evaluation
-uses request-local caches, and independent support traversal shares a
+checks both mapped worktrees and the visible claim premises. Request-local caches
+reuse file and scalar checks; independent support traversal shares a
 request-local memo rather than reloading shared chains for every ranked claim.
 Scoring uses one request timestamp so evaluation duration cannot reorder pages.
 
@@ -200,7 +201,11 @@ Source records, derived claims, checkpoints and the FTS projection share one
 SQLite file. Deletion is an explicit admin action with a dry-run preview and a
 confirmation token bound to the policy and affected project generations. It writes tombstones that
 ingestion replay respects, marks dependent claim support as lost and
-recomputes their status, removes FTS rows, then truncates the WAL. With
+recomputes their status, removes FTS rows, then truncates the WAL.
+A claim-tree preview enumerates the target and linked descendants within the
+owning project in a single read snapshot. Its confirmation also binds the
+direct dependants losing support, including those owned by another project.
+Apply recomputes the selection in the deletion transaction. With
 `secure_delete` freed pages are zeroed, but copy-on-write filesystems, SSD
 remapping, filesystem snapshots and earlier backups can still retain data;
 physical erasure is not guaranteed. Automatic pruning is disabled until the

@@ -69,6 +69,34 @@ and limits. Test names below are in `cmd/ichnora/` unless otherwise noted.
 and service with synthetic evidence files, restart, replay, conflicting writes,
 pagination, project scope, evidence-path policy and project retention preview.
 
+The CLI fixtures in `memory_review_test.go` check transitive source drift,
+diverging worktrees, saved verification inputs, exact JSON values, independent
+facts in one file, scoped review, and retention of unrelated claims after a
+confirmed claim-tree deletion. They also verify the evidence for turning a
+failed SIM trial into a reusable rule.
+
+### Paired coding tasks
+
+`TestPairedCodingReuse` prepares fresh synthetic handler repositories for a
+stable route, a changed route and a task without prior evidence. Each task
+receives three conditions in rotated order: no prior memory, the original
+plain note, and Ichnora's actual search response. The prompt, starting files
+and 2,048-byte context allowance are identical within each pair. The scorer
+runs the dispatcher and checks the probe, ordinary behavior, route selection
+and the standby handler. Logs include task success, standby edits, context
+bytes and elapsed time. A standby edit on a switched route flags a change to
+the former handler; it does not establish the agent's reason.
+
+The default editor verifies the fixtures and scorer. To measure an agent,
+supply an absolute executable via `ICHNORA_REUSE_RUNNER` and run
+`go test -tags libsqlite3 ./cmd/ichnora -run '^TestPairedCodingReuse$' -count=1 -timeout=50m -v`
+in the development shell in a disposable guest. The runner receives one JSON
+object on stdin with `task` and `memory`, edits the current project and
+exits within five minutes. It gets a fresh home and a minimal environment.
+Use the same model, tool limits and sampling settings across conditions.
+Read the per-task scores from the test log; unsuccessful agent solutions are
+reported as outcomes. Keep model runs and measurements outside the repository.
+
 ## Optional checks and interpretation
 
 [Operations](operations.md#development-and-optional-integration-checks) describes

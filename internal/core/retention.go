@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/timfewi/ichnora/internal/contract"
@@ -16,6 +17,7 @@ type RetentionResult struct {
 	Selector   string         `json:"selector"`
 	Target     string         `json:"target"`
 	Counts     map[string]int `json:"counts"`
+	Selected   []string       `json:"selected_claims,omitempty"`
 	Dependants []string       `json:"dependent_claims_losing_support"`
 	Confirm    string         `json:"confirm,omitempty"`
 	Applied    bool           `json:"applied"`
@@ -35,12 +37,12 @@ type selection struct {
 
 // token binds a retention confirmation to the selection and the current
 // policy and owner-project generations.
-func (c *Core) retentionToken(ctx context.Context, q querier, req contract.AdminRequest, owner string) (string, error) {
+func (c *Core) retentionToken(ctx context.Context, q querier, req contract.AdminRequest, owner string, dependants []string) (string, error) {
 	gen, err := store.Generation(ctx, q)
 	if err != nil {
 		return "", err
 	}
-	return c.sign("retention", req.Selector, req.Target, itoa(int(gen)), itoa(int(store.ProjectGeneration(ctx, q, owner))))[:32], nil
+	return c.sign("retention", req.Selector, req.Target, itoa(int(gen)), itoa(int(store.ProjectGeneration(ctx, q, owner))), mustJSON(dependants))[:32], nil
 }
 
 func (c *Core) selectFor(ctx context.Context, q querier, selector, target string) (selection, error) {
@@ -63,12 +65,25 @@ func (c *Core) selectFor(ctx context.Context, q querier, selector, target string
 	}
 	var err error
 	switch selector {
-	case "claim":
+	case "claim", "claim-tree":
 		var id string
 		if err := q.QueryRowContext(ctx, `SELECT id, project_id FROM claims WHERE id = ?`, target).Scan(&id, &sel.owner); err != nil {
 			return sel, contract.Errf(contract.CodeNotFound, "unknown claim")
 		}
 		sel.claims = []string{id}
+		if selector == "claim-tree" {
+			const limit = 1000
+			sel.claims, err = collect(`WITH RECURSIVE tree(id) AS (SELECT ? UNION
+				SELECT r.claim_id FROM tree JOIN refs r ON r.ref = tree.id AND r.kind = 'claim' AND r.role = 'support'
+				JOIN claims c ON c.id = r.claim_id WHERE c.project_id = ? LIMIT ?)
+				SELECT id FROM tree ORDER BY id`, id, sel.owner, limit+1)
+			if err != nil {
+				return sel, err
+			}
+			if len(sel.claims) > limit {
+				return sel, contract.Errf(contract.CodeInvalid, "claim tree exceeds 1000 claims; preview a smaller branch")
+			}
+		}
 	case "session":
 		// The session and its child sessions.
 		if sel.sessions, err = collect(`WITH RECURSIVE tree(id) AS (SELECT id FROM sessions WHERE id = ?
@@ -96,7 +111,7 @@ func (c *Core) selectFor(ctx context.Context, q querier, selector, target string
 			return sel, err
 		}
 	default:
-		return sel, contract.Errf(contract.CodeInvalid, "selector must be claim, session or project")
+		return sel, contract.Errf(contract.CodeInvalid, "selector must be claim, claim-tree, session or project")
 	}
 	for _, id := range sel.sessions {
 		var harness, native string
@@ -173,6 +188,7 @@ func (c *Core) countSelection(ctx context.Context, q querier, sel selection) (ma
 		}
 		rows.Close()
 	}
+	sort.Strings(dependants)
 	return counts, dependants, nil
 }
 
@@ -182,7 +198,11 @@ func (c *Core) RetentionPreview(ctx context.Context, caller Caller, req contract
 	if err := c.admin(caller); err != nil {
 		return RetentionResult{}, err
 	}
-	db := c.store.Read()
+	db, err := c.store.Read().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return RetentionResult{}, err
+	}
+	defer db.Rollback()
 	sel, err := c.selectFor(ctx, db, req.Selector, req.Target)
 	if err != nil {
 		return RetentionResult{}, err
@@ -191,11 +211,15 @@ func (c *Core) RetentionPreview(ctx context.Context, caller Caller, req contract
 	if err != nil {
 		return RetentionResult{}, err
 	}
-	token, err := c.retentionToken(ctx, db, req, sel.owner)
+	token, err := c.retentionToken(ctx, db, req, sel.owner, deps)
 	if err != nil {
 		return RetentionResult{}, err
 	}
-	return RetentionResult{Selector: req.Selector, Target: req.Target, Counts: counts, Dependants: nonNil(deps),
+	var selected []string
+	if req.Selector == "claim-tree" {
+		selected = sel.claims
+	}
+	return RetentionResult{Selector: req.Selector, Target: req.Target, Selected: selected, Counts: counts, Dependants: nonNil(deps),
 		Confirm: token, Erasure: erasureNote}, nil
 }
 
@@ -215,7 +239,11 @@ func (c *Core) retentionApply(ctx context.Context, caller Caller, req contract.A
 		if err != nil {
 			return err
 		}
-		token, err := c.retentionToken(ctx, tx, req, sel.owner)
+		counts, deps, err := c.countSelection(ctx, tx, sel)
+		if err != nil {
+			return err
+		}
+		token, err := c.retentionToken(ctx, tx, req, sel.owner, deps)
 		if err != nil {
 			return err
 		}
@@ -230,10 +258,6 @@ func (c *Core) retentionApply(ctx context.Context, caller Caller, req contract.A
 			if !c.cfg.PruneMissingProjects || !c.missingRoots(project.Roots) {
 				return contract.Errf(contract.CodeConflict, "project roots changed before cleanup; nothing deleted")
 			}
-		}
-		counts, deps, err := c.countSelection(ctx, tx, sel)
-		if err != nil {
-			return err
 		}
 		out.Counts, out.Dependants = counts, nonNil(deps)
 		for _, key := range sel.tombstones {

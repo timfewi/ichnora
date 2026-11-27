@@ -37,6 +37,8 @@ type evaluator struct {
 	heads    map[string]headCheck
 	tabula   map[string]json.RawMessage
 	toolUsed int
+	sources  map[sourceKey]verdict
+	fields   map[fieldKey]fieldCheck
 }
 
 type fileCheck struct {
@@ -49,11 +51,11 @@ type headCheck struct {
 	err  error
 }
 
-func (c *Core) evaluator(ctx context.Context) (*evaluator, error) {
+func (c *Core) evaluator(ctx context.Context, q querier) (*evaluator, error) {
 	env, gap := c.environment()
-	e := &evaluator{c: c, ctx: ctx, now: c.now(), env: env, envGap: gap, roots: map[string]string{},
+	e := &evaluator{sources: make(map[sourceKey]verdict), fields: make(map[fieldKey]fieldCheck), c: c, ctx: ctx, now: c.now(), env: env, envGap: gap, roots: map[string]string{},
 		files: map[string]fileCheck{}, heads: map[string]headCheck{}, tabula: map[string]json.RawMessage{}}
-	rows, err := c.store.Read().QueryContext(ctx, `SELECT worktree_id, path FROM roots`)
+	rows, err := q.QueryContext(ctx, `SELECT worktree_id, path FROM roots`)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +109,8 @@ func (v *verdict) mark(state, reason string) {
 	rank := map[string]int{ApCurrent: 0, ApUnknown: 1, ApStale: 2, ApExpired: 3}
 	if rank[state] > rank[v.state] {
 		v.state = state
+		v.reasons = append([]string{reason}, v.reasons...)
+		return
 	}
 	v.reasons = append(v.reasons, reason)
 }
@@ -114,6 +118,8 @@ func (v *verdict) mark(state, reason string) {
 // dep validates one stored dependency against the claim's worktree root.
 func (e *evaluator) dep(v *verdict, root string, d contract.Ref) {
 	switch d.Kind {
+	case "json_field":
+		e.fieldDependency(v, root, d)
 	case "file", "ast":
 		if root == "" {
 			v.mark(ApUnknown, "worktree root is no longer mapped")
@@ -238,8 +244,97 @@ func (e *evaluator) claim(kind, worktree, expires string, deps []contract.Ref) v
 	return v
 }
 
+type sourceKey struct {
+	id    string
+	depth int
+}
+
+func (e *evaluator) forWorktree(s Scope, project, worktree, kind, expires string, deps []contract.Ref) verdict {
+	v := e.claim(kind, worktree, expires, deps)
+	if worktree == s.Worktree {
+		return v
+	}
+	for _, dep := range deps {
+		if dep.Kind == "environment" {
+			continue
+		}
+		if project != s.ProjectID {
+			v.mark(ApUnknown, "source belongs to a different project; target applicability is unknown")
+			break
+		}
+		target := verdict{state: ApCurrent}
+		e.dep(&target, s.Root, dep)
+		v.mark(target.state, "calling worktree: "+strings.Join(target.reasons, ", "))
+	}
+	return v
+}
+
+func (e *evaluator) effective(q querier, s Scope, cl claimRow, refs []refRow, depth int) (verdict, error) {
+	v := e.forWorktree(s, cl.Project, cl.Worktree, cl.Kind, cl.Expires, depsOf(refs))
+	for _, r := range refs {
+		if r.Role != "support" || r.Kind != "claim" {
+			continue
+		}
+		if r.State == "lost" {
+			v.mark(ApUnknown, "source claim support was lost")
+			continue
+		}
+		source, err := e.source(q, s, r.Ref, depth+1)
+		if err != nil {
+			return verdict{}, err
+		}
+		if source.state != ApCurrent && source.state != ApDurable {
+			state := source.state
+			if state == ApUnchecked {
+				state = ApUnknown
+			}
+			v.mark(state, "source claim applicability: "+source.state)
+		}
+	}
+	return v, nil
+}
+
+func (e *evaluator) source(q querier, s Scope, id string, depth int) (verdict, error) {
+	key := sourceKey{id, depth}
+	if v, ok := e.sources[key]; ok {
+		return v, nil
+	}
+	if depth > 8 || len(e.sources) >= maxSearchCandidates {
+		return verdict{ApUnknown, []string{"source validation limit reached"}}, nil
+	}
+	v := verdict{ApUnknown, []string{"source unavailable in scope"}}
+	e.sources[key] = v
+	_, visible, err := inScopeClaim(e.ctx, q, s, id)
+	if err != nil || !visible {
+		return v, err
+	}
+	cl, err := scanClaim(q.QueryRowContext(e.ctx, `SELECT `+claimColumns+` FROM claims c WHERE c.id = ?`, id))
+	if err != nil {
+		return verdict{}, err
+	}
+	conflicts, err := conflictsOf(e.ctx, q, s, id)
+	if err != nil {
+		return verdict{}, err
+	}
+	if !active(cl.Status) || len(conflicts) > 0 {
+		v.reasons = []string{"source inactive or disputed"}
+		e.sources[key] = v
+		return v, nil
+	}
+	refs, err := loadRefs(e.ctx, q, id)
+	if err != nil {
+		return verdict{}, err
+	}
+	v, err = e.effective(q, s, cl, refs, depth)
+	if err != nil {
+		return verdict{}, err
+	}
+	e.sources[key] = v
+	return v, nil
+}
+
 // inputs checks a verification's tested inputs against the task's worktree.
-func (e *evaluator) inputs(worktree string, in contract.VerificationInput) verdict {
+func (e *evaluator) inputs(s Scope, worktree string, in contract.VerificationInput) verdict {
 	var deps []contract.Ref
 	if in.Revision != "" {
 		deps = append(deps, contract.Ref{Kind: "revision", Value: in.Revision})
@@ -253,7 +348,7 @@ func (e *evaluator) inputs(worktree string, in contract.VerificationInput) verdi
 	if len(deps) == 0 {
 		return verdict{state: ApUnknown, reasons: []string{"no tested inputs recorded"}}
 	}
-	return e.claim("observation", worktree, "", deps)
+	return e.forWorktree(s, s.ProjectID, worktree, "observation", "", deps)
 }
 
 // gitHead reads HEAD without running git: it follows `.git` files of

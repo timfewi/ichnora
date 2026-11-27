@@ -13,12 +13,13 @@ type SessionHint struct {
 // Ref is a support reference or an applicability dependency.
 type Ref struct {
 	Kind        string `json:"kind"`
-	Ref         string `json:"ref,omitempty" jsonschema:"record ID for event, turn, claim or checkpoint; name for check or external"`
+	Ref         string `json:"ref,omitempty" jsonschema:"record ID, problem/attempt for a completed SIM attempt, or check/external locator"`
 	Path        string `json:"path,omitempty" jsonschema:"project-relative file for file, ast or tabula"`
 	SHA256      string `json:"sha256,omitempty" jsonschema:"file digest; defaults to the current one"`
 	Digest      string `json:"digest,omitempty"`
 	Locator     string `json:"locator,omitempty"`
-	Value       string `json:"value,omitempty" jsonschema:"commit for revision; defaults to the current HEAD"`
+	Field       string `json:"field,omitempty" jsonschema:"top-level JSON object key for json_field"`
+	Value       string `json:"value,omitempty" jsonschema:"commit for revision or JSON scalar literal for json_field"`
 	Epoch       string `json:"epoch,omitempty" jsonschema:"environment epoch from status; defaults to the current one"`
 	Card        string `json:"card,omitempty"`
 	Section     string `json:"section,omitempty"`
@@ -37,15 +38,16 @@ type ScopeInfo struct {
 
 // Provenance summarizes where a record came from.
 type Provenance struct {
-	Origin       string `json:"origin"`
-	CreatedAt    string `json:"created_at"`
-	EventTime    string `json:"event_time,omitempty"`
-	ValidatedAt  string `json:"validated_at,omitempty"`
-	Support      int    `json:"independent_support"`
-	LostSupport  int    `json:"lost_support,omitempty"`
-	SharedFrom   string `json:"shared_from,omitempty"`
-	Derivation   string `json:"derivation,omitempty"`
-	SourceDigest string `json:"source_digest,omitempty"`
+	Origin         string `json:"origin"`
+	CreatedAt      string `json:"created_at"`
+	EventTime      string `json:"event_time,omitempty"`
+	ValidatedAt    string `json:"validated_at,omitempty"`
+	Support        int    `json:"independent_support"`
+	LostSupport    int    `json:"lost_support,omitempty"`
+	SharedFrom     string `json:"shared_from,omitempty"`
+	Derivation     string `json:"derivation,omitempty"`
+	SourceWorktree string `json:"source_worktree,omitempty"`
+	SourceDigest   string `json:"source_digest,omitempty"`
 }
 
 // Item is one search result.
@@ -94,18 +96,19 @@ type BudgetInfo struct {
 
 // SearchRequest is the `search` operation.
 type SearchRequest struct {
-	Query     string       `json:"query" jsonschema:"words to match; empty lists the project's claims"`
-	View      string       `json:"view,omitempty" jsonschema:"working (default) holds validated claims and leads; history adds replaced, stale and expired ones"`
-	TaskID    string       `json:"task_id,omitempty"`
-	SessionID string       `json:"session_id,omitempty"`
-	Kinds     []string     `json:"kinds,omitempty"`
-	Files     []string     `json:"files,omitempty" jsonschema:"project-relative paths that rank related records first"`
-	Since     string       `json:"since,omitempty" jsonschema:"RFC 3339"`
-	Until     string       `json:"until,omitempty" jsonschema:"RFC 3339"`
-	Limit     int          `json:"limit,omitempty" jsonschema:"1 to 50, default 10"`
-	Cursor    string       `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page"`
-	MaxBytes  int          `json:"max_bytes,omitempty"`
-	Session   *SessionHint `json:"session,omitempty" jsonschema:"attribution hint set by the client; omit"`
+	DerivedFrom string       `json:"derived_from,omitempty" jsonschema:"return claims directly derived from this visible claim ID"`
+	Query       string       `json:"query" jsonschema:"words to match; empty lists the project's claims"`
+	View        string       `json:"view,omitempty" jsonschema:"working (default) includes current claims, leads, conflicts and sources; history returns conflicts and historical claims; review lists claims needing attention"`
+	TaskID      string       `json:"task_id,omitempty"`
+	SessionID   string       `json:"session_id,omitempty"`
+	Kinds       []string     `json:"kinds,omitempty"`
+	Files       []string     `json:"files,omitempty" jsonschema:"project-relative paths that rank related records first"`
+	Since       string       `json:"since,omitempty" jsonschema:"RFC 3339"`
+	Until       string       `json:"until,omitempty" jsonschema:"RFC 3339"`
+	Limit       int          `json:"limit,omitempty" jsonschema:"1 to 50, default 10"`
+	Cursor      string       `json:"cursor,omitempty" jsonschema:"next_cursor of the previous page"`
+	MaxBytes    int          `json:"max_bytes,omitempty"`
+	Session     *SessionHint `json:"session,omitempty" jsonschema:"attribution hint set by the client; omit"`
 }
 
 // SearchResult is the `search` result.
@@ -196,16 +199,18 @@ type SupportCheck struct {
 
 // EvidenceResult is the `evidence` result.
 type EvidenceResult struct {
-	ID            string         `json:"id"`
-	Status        string         `json:"status"`
-	Applicability string         `json:"applicability"`
-	Checks        []SupportCheck `json:"checks"`
-	Gaps          []string       `json:"gaps"`
-	GapsTotal     int            `json:"gaps_total"`
-	Omitted       int            `json:"omitted_budget"`
-	Complete      bool           `json:"complete"`
-	Notice        string         `json:"notice"`
-	Budget        BudgetInfo     `json:"budget"`
+	SourceWorktree string         `json:"source_worktree,omitempty"`
+	Reasons        []string       `json:"reasons,omitempty"`
+	ID             string         `json:"id"`
+	Status         string         `json:"status"`
+	Applicability  string         `json:"applicability"`
+	Checks         []SupportCheck `json:"checks"`
+	Gaps           []string       `json:"gaps"`
+	GapsTotal      int            `json:"gaps_total"`
+	Omitted        int            `json:"omitted_budget"`
+	Complete       bool           `json:"complete"`
+	Notice         string         `json:"notice"`
+	Budget         BudgetInfo     `json:"budget"`
 }
 
 // Trim drops excerpts, then checks, then gap texts; gaps_total keeps their count.
@@ -220,6 +225,8 @@ func (r *EvidenceResult) Trim() bool {
 		}
 	case len(r.Gaps) > 0:
 		r.Gaps = r.Gaps[:len(r.Gaps)-1]
+	case len(r.Reasons) > 0:
+		r.Reasons = r.Reasons[:len(r.Reasons)-1]
 	default:
 		return false
 	}

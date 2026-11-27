@@ -69,7 +69,7 @@ Roles: R = reader, C = capture, A = admin.
 
 | Op                                      | Role | Request                                                                                                                                                                                                                                 | Result                                                                                                                                                             |
 | --------------------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `search`                                | R    | `query`, `view` (`working` default, `history`, `all`), `task_id`, `session_id`, `kinds`, `files`, `since`, `until`, `limit` (≤50), `cursor`, `max_bytes`                                                                                | `scope`, `items[]` (`id`, `group`, `kind`, `title`, `preview`, `status`, `applicability`, `reasons`, `provenance`), `totals`, `omitted`, `complete`, `next_cursor` |
+| `search`                                | R    | `query`, `view` (`working` default, `history`, `all`, `review`), `derived_from`, `task_id`, `session_id`, `kinds`, `files`, `since`, `until`, `limit` (≤50), `cursor`, `max_bytes`                                                      | `scope`, `items[]` (`id`, `group`, `kind`, `title`, `preview`, `status`, `applicability`, `reasons`, `provenance`), `totals`, `omitted`, `complete`, `next_cursor` |
 | `read`                                  | R    | `ids` (≤20), `max_bytes`                                                                                                                                                                                                                | `records[]` with full fields, support refs and links; `missing[]`                                                                                                  |
 | `evidence`                              | R    | `id` (claim), `max_bytes`, `excerpt_lines` (≤40)                                                                                                                                                                                        | `support[]` with stored digest, current validation and optional excerpt; `gaps[]`                                                                                  |
 | `capture`                               | C    | `claims[]` (≤20): `kind`, `title`, `body`, `rationale`, `alternatives`, `task_id`, `status` (`observed`/`inferred`), `support[]`, `depends[]`, `supersedes[]`, `contradicts[]`, `expires_at`, `derived_from[]`, `transform`             | `ids[]`                                                                                                                                                            |
@@ -84,7 +84,7 @@ Roles: R = reader, C = capture, A = admin.
 | `withdraw`                              | A    | `project`                                                                                                                                                                                                                               | project                                                                                                                                                            |
 | `policy`                                | A    | `path`                                                                                                                                                                                                                                  | decision and reason                                                                                                                                                |
 | `share` / `revoke`                      | A    | `claim_id`, `to_project` / `share_id`                                                                                                                                                                                                   | share                                                                                                                                                              |
-| `retention_preview` / `retention_apply` | A    | `selector` (`claim`, `session`, `project`), `confirm`                                                                                                                                                                                   | affected counts, `confirm` token                                                                                                                                   |
+| `retention_preview` / `retention_apply` | A    | `selector` (`claim`, `claim-tree`, `session`, `project`), `target`, `confirm`                                                                                                                                                           | affected counts, `confirm` token                                                                                                                                   |
 | `import_preview` / `import_apply`       | A    | `harness`, `paths[]`, `confirm`                                                                                                                                                                                                         | sessions and their attribution                                                                                                                                     |
 | `reconcile`                             | A    | —                                                                                                                                                                                                                                       | cursors advanced                                                                                                                                                   |
 | `backup`                                | A    | `out`                                                                                                                                                                                                                                   | path and size                                                                                                                                                      |
@@ -128,6 +128,13 @@ and overlong-word-only queries return `invalid_request` instead of being passed
 to FTS5. A `task_id` filter applies to claims and to source turns whose session
 is assigned to that task. Unassigned sessions do not match a task filter.
 
+The `review` view returns unresolved conflicts, leads and stale or expired claims,
+with reasons, even when multiple items have the same evidence. Superseded and
+invalidated claims are available in history. The optional `derived_from` ID
+selects direct derivatives of a visible claim in any view. Use `view: "all"`
+to include healthy and historical derivatives. Foreign and missing source IDs
+both return `out_of_scope`.
+
 Scope, kind, task, session and time filters are applied in SQL. Matching records
 are fetched in batches of 500 within one read snapshot, then classified and
 ranked before pagination. The batch size is not a total-result cutoff: old
@@ -151,20 +158,49 @@ dependencies, or decision with neither dependencies nor expiry), `stale` (a
 dependency changed),
 `expired`, `unknown` (a dependency cannot be validated now).
 
-The working view contains only `observed`/`inferred` claims whose
-applicability is `current` or `durable`. `unchecked`, `unknown` and
+Only `observed`/`inferred` claims whose applicability is `current` or `durable`
+can enter the `working` group. The default view also returns eligible source
+turns, leads and conflicts. `unchecked`, `unknown` and
 `unsupported` claims appear only as `lead` items. Disputed claims and
 unresolved `contradicts` links appear as `conflict` items in every view. The
-`history` view adds superseded, invalidated, expired and stale claims with
-their replacement links.
+`history` view includes conflicts and historical claims with any replacement
+links. The `all` view includes every group.
 
-Support references (`support[]`): `{"kind":"event"|"turn"|"claim"|"checkpoint"|"file"|"tabula"|"ast"|"check"|"external","ref":"…","digest":"sha256:…","locator":"…"}`.
+Support references (`support[]`): `{"kind":"event"|"turn"|"claim"|"checkpoint"|"file"|"tabula"|"ast"|"json_field"|"attempt"|"check"|"external","ref":"…","digest":"sha256:…","locator":"…"}`.
 Dependencies (`depends[]`): `{"kind":"file","path":"rel/path","sha256":"…"}`,
 `{"kind":"revision","value":"<commit>"}`, `{"kind":"environment","epoch":"…"}`,
 `{"kind":"tabula","card":"…","section":"…","fingerprint":"…"}`,
 `{"kind":"ast","path":"…","sha256":"…","symbol":"…","line":N}`.
+A `json_field` reference works in both `support` and `depends`. For example,
+`{"kind":"json_field","path":"settings.json","field":"port","value":"9200"}`
+compares the numeric literal 9200 at the top-level key `port`. Supply a JSON
+scalar literal as the `value` string. Strings compare after decoding, numbers
+by their literal spelling. The file must be a UTF-8 JSON object of at most
+1 MiB. Capture verifies the value and records the file digest. On recall a
+missing key, different value or changed type is stale. An unreadable or invalid
+object or a duplicate target key gives unknown applicability. Other keys may
+change independently. A matched value verifies that particular predicate.
+Ordinary file dependencies verify the bytes of the declared files.
+
+`{"kind":"attempt","ref":"problem/attempt"}` in `support` identifies a completed
+SIM observation in the same project, including a failed trial. Evidence retains
+its original artifact digest and provides the recorded prediction and outcome
+to its owning project. Give the new rule its own applicability dependencies.
+
+Worktree-bound dependencies must pass at the origin and in the calling
+worktree. A mismatch includes a calling-worktree reason and the origin's
+`source_worktree` for same-project claims. A shared claim with worktree-bound
+dependencies has unverified applicability in the recipient project. Evidence
+checks describe the source; the overall verdict and reasons include the target.
+Each claim used as a source must also be visible, active, undisputed and
+applicable. A missing or uncheckable premise blocks working recall. Traversal
+has an eight-edge depth limit and a 10,000-entry request cache limit; an
+unexamined premise gives unknown applicability. Descendants retain their own
+dependency and expiry requirements. The count of independent support roots
+describes provenance and may include historical evidence.
+
 Support from injected memory or from claims sharing a derivation lineage counts
-once. A summary (`derived_from`) is never independent corroboration.
+once. A summary (`derived_from`) is never independent corroboration. Search collapses repeated statements with the same evidence and applicability inputs; distinct facts from the same source remain visible.
 
 ### Task checkpoint fields
 
