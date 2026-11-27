@@ -36,8 +36,8 @@ func TestInvalidationPropagatesAndRepetitionIsNotEvidence(t *testing.T) {
 	obs := e.captureIDs(e.alpha, contract.ClaimInput{Kind: "observation", Title: "Parser cache misses digest changes",
 		Body: "Observed in the planning turn.", Support: []contract.Ref{{Kind: "turn", Ref: turn}}})[0]
 	sums := e.captureIDs(e.alpha,
-		contract.ClaimInput{Kind: "summary", Title: "Summary one: parser cache misses digests", Body: "Restated.", DerivedFrom: []string{obs}},
-		contract.ClaimInput{Kind: "summary", Title: "Summary two: parser cache misses digests", Body: "Restated again.", DerivedFrom: []string{obs}})
+		contract.ClaimInput{Kind: "summary", Title: "Parser cache misses digests", Body: "Restated.", DerivedFrom: []string{obs}},
+		contract.ClaimInput{Kind: "summary", Title: "Parser cache misses digests", Body: "Restated.", DerivedFrom: []string{obs}})
 	r := e.must(e.alpha, "", "read", obs, sums[0], sums[1])
 	var rd contract.ReadResult
 	r.into(t, &rd)

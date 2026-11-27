@@ -19,7 +19,9 @@ service or direct-database client fallback.
 - Problem-specific improvement histories with a prediction recorded before each
   trial and an observed outcome tied to a fingerprinted evaluation artifact.
 - Bounded search/read responses, evidence references, stale-dependency checks,
-  conflicts and explicit history views.
+  conflicts and a review view for claims that need new evidence. File-backed
+  claims and their derivatives are checked in the originating and calling
+  worktrees; JSON field checks can follow a single configuration value.
 - Claude Code and Codex transcript adapters, plus a thin OpenCode plugin run by
   OpenCode's own runtime. See the [interface evidence and limits](docs/adapters.md);
   fixture coverage is not a claim of end-to-end live harness compatibility.

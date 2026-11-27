@@ -99,12 +99,12 @@ func TestAdvertisedValues(t *testing.T) {
 		values      string
 		optional    bool
 	}{
-		{"memory_search", "view", func(v string) map[string]any { return map[string]any{"query": "", "view": v} }, "working history all", true},
+		{"memory_search", "view", func(v string) map[string]any { return map[string]any{"query": "", "view": v} }, "working history all review", true},
 		{"memory_search", "kinds", func(v string) map[string]any { return map[string]any{"query": "", "kinds": []any{v}} }, "observation decision summary note source", false},
 		{"memory_capture", "kind", func(v string) map[string]any { return claim("kind", v) }, "observation decision summary note", false},
 		{"memory_capture", "status", func(v string) map[string]any { return claim("status", v) }, "observed inferred", true},
-		{"memory_capture", "support", ref("support"), "file ast tabula event turn claim checkpoint check external", false},
-		{"memory_capture", "depends", ref("depends"), "file ast tabula revision environment", false},
+		{"memory_capture", "support", ref("support"), "file ast json_field tabula event turn claim checkpoint attempt check external", false},
+		{"memory_capture", "depends", ref("depends"), "file ast json_field tabula revision environment", false},
 		{"memory_update", "status", func(v string) map[string]any { return map[string]any{"id": "clm_x", "status": v, "reason": "r"} }, "disputed invalidated", false},
 		{"memory_task", "action", func(v string) map[string]any { return map[string]any{"action": v} }, "list create checkpoint transition resume", false},
 		{"memory_task", "to", task("to"), "active blocked completed cancelled reopened", true},

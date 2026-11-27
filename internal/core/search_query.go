@@ -45,6 +45,10 @@ func walkClaims(ctx context.Context, q querier, s Scope, req contract.SearchRequ
 		where = append(where, `c.task_id = ?`)
 		args = append(args, req.TaskID)
 	}
+	if req.DerivedFrom != "" {
+		where = append(where, `c.id IN (SELECT claim_id FROM refs WHERE role = 'support' AND kind = 'claim' AND ref = ?)`)
+		args = append(args, req.DerivedFrom)
+	}
 	if req.SessionID != "" {
 		where = append(where, `json_extract(c.origin, '$.session') = ?`)
 		args = append(args, req.SessionID)

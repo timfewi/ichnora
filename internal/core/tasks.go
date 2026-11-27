@@ -378,7 +378,18 @@ func (c *Core) Resume(ctx context.Context, caller Caller, req contract.ResumeReq
 }
 
 func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget int) (*contract.ResumeResult, error) {
-	db := c.store.Read()
+	db, err := c.store.Read().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer db.Rollback()
+	current, ok, err := c.resolvePath(ctx, db, s.Root)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || current.ProjectID != s.ProjectID || current.Worktree != s.Worktree {
+		return nil, errNoScope
+	}
 	t, ok, err := c.loadTask(ctx, db, s, taskID)
 	if err != nil {
 		return nil, err
@@ -390,7 +401,7 @@ func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget i
 	if err != nil {
 		return nil, err
 	}
-	ev, err := c.evaluator(ctx)
+	ev, err := c.evaluator(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +475,10 @@ func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget i
 		if err != nil {
 			return nil, err
 		}
-		v := ev.claim(cl.Kind, cl.Worktree, cl.Expires, depsOf(refs))
+		v, err := ev.effective(db, s, cl, refs, 0)
+		if err != nil {
+			return nil, err
+		}
 		conflicts, err := conflictsOf(ctx, db, s, id)
 		if err != nil {
 			return nil, err
@@ -525,7 +539,7 @@ func (c *Core) buildResume(ctx context.Context, s Scope, taskID string, budget i
 	emitClaims("working")
 	var stale []contract.Verification
 	for _, v := range cp.Verification {
-		verdict := ev.inputs(t.Worktree, v.Inputs)
+		verdict := ev.inputs(s, t.Worktree, v.Inputs)
 		if verdict.state == ApCurrent {
 			add("check", v.Check+" "+v.Outcome, "", "applicable", firstN(verdict.reasons, 3))
 		} else {

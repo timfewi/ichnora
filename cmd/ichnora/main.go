@@ -25,7 +25,7 @@ var version = "dev"
 const usage = `usage: ichnora <command> [flags] [args]
 
 Agent commands (agent socket):
-  search QUERY            scoped retrieval (--view, --task, --session, --kind, --file, --since, --until, --limit, --cursor)
+  search QUERY            scoped retrieval (--view, --derived-from, --task, --session, --kind, --file, --since, --until, --limit, --cursor)
   read ID...              batch details
   evidence CLAIM_ID       validate support and dependencies (--lines)
   sim propose|observe|history   record and retrieve problem-specific attempts (see docs/operations.md)
@@ -40,7 +40,7 @@ Agent commands (agent socket):
 Owner commands (admin socket):
   projects | discover | enroll PATH | withdraw PROJECT | policy PATH
   share CLAIM_ID --to PROJECT | revoke SHARE_ID
-  retention preview|apply --selector claim|session|project --target ID [--confirm TOKEN]
+  retention preview|apply --selector claim|claim-tree|session|project --target ID [--confirm TOKEN]
   import preview|apply --harness H [--confirm TOKEN] PATH...
   reconcile | backup OUT | environment
 
@@ -170,7 +170,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "search":
 		var req contract.SearchRequest
 		var kinds, files list
-		fs.StringVar(&req.View, "view", "", "working|history|all")
+		fs.StringVar(&req.View, "view", "", "working|history|all|review")
+		fs.StringVar(&req.DerivedFrom, "derived-from", "", "direct derivatives of a visible claim")
 		fs.StringVar(&req.TaskID, "task", "", "task filter")
 		fs.StringVar(&req.SessionID, "session", "", "session filter")
 		fs.Var(&kinds, "kind", "kind filter (repeatable)")
@@ -366,7 +367,7 @@ func adminCommand(cmd string, fs *flag.FlagSet, parse func() ([]string, bool), c
 		}
 		req.Out = pos[0]
 	case "retention", "import":
-		fs.StringVar(&req.Selector, "selector", "", "claim|session|project")
+		fs.StringVar(&req.Selector, "selector", "", "claim|claim-tree|session|project")
 		fs.StringVar(&req.Target, "target", "", "selected ID")
 		fs.StringVar(&req.Confirm, "confirm", "", "token from the preview")
 		fs.StringVar(&req.Harness, "harness", "", "claude|codex|opencode")

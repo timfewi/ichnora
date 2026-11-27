@@ -214,6 +214,28 @@ page with `--offset` set to its `next_offset`. Set `--max-bytes` to retrieve
 a record larger than the current response budget. These explicit operations
 use the agent socket and work with automatic collection and recall disabled.
 
+## Review and reuse a claim
+
+Run `ichnora search "" --view review` in the target worktree. Inspect a
+result with `ichnora evidence CLAIM_ID`, then find its direct derivatives
+with `ichnora search "" --view all --derived-from CLAIM_ID`. A file digest
+answers whether the bytes match. For a specific setting, record the value
+you actually observed. For example, run this in a project whose
+`settings.json` contains the numeric field `port` set to 9200.
+
+```sh
+ichnora capture <<'JSON'
+{"claims":[{"kind":"observation","title":"The configured port is 9200","support":[{"kind":"json_field","path":"settings.json","field":"port","value":"9200"}],"depends":[{"kind":"json_field","path":"settings.json","field":"port","value":"9200"}]}]}
+JSON
+```
+
+After rechecking a changed fact, capture its replacement with the old ID in
+`supersedes`. Revisit the derivatives against the new evidence individually.
+To record a lesson from several trials, use a summary with one
+`{"kind":"attempt","ref":"problem/attempt"}` support per observed trial.
+State where the lesson applies, include counterexamples and give it a testable
+dependency. Searching and reviewing do not renew a claim.
+
 ## Register clients and hooks explicitly
 
 Configure your harness's stdio MCP server entry to launch the installed binary
@@ -275,6 +297,16 @@ Replace `TOKEN` with the corresponding preview's confirmation token and
 `SESSION_ID` with an actual `ses_...` identifier. Review affected records before
 applying; changes can invalidate a token. `reconcile` advances known transcript
 cursors; it is not a blanket historical scan. Automatic retention is disabled.
+
+To forget a claim together with its linked restatements, use
+`ichnora retention preview --selector claim-tree --target CLAIM_ID`. Inspect
+`selected_claims` before applying the same selector and token. This selection
+follows claim-support links within the target's project and accepts up to
+1,000 claims. A summary drawing on several sources is selected in full.
+Unrelated claims survive. Direct derivatives in other projects are reported
+as losing support and keep their text. Free-text copies without links,
+checkpoints, source files and backups require separate review. Use the
+single-claim selector when historical derivatives should remain readable.
 
 ## Backup and restore
 
